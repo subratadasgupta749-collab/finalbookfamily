@@ -265,16 +265,8 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[color:var(--ft-link)]/20 pt-6 text-xs text-[color:var(--ft-link)] sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-center gap-3 border-t border-[color:var(--ft-link)]/20 pt-6 text-xs text-[color:var(--ft-link)] sm:flex-row">
           <p>{copyright}</p>
-          <div className="flex gap-5">
-            <Link to="/cookies" className={linkCls}>
-              Cookies
-            </Link>
-            <Link to="/disclaimer" className={linkCls}>
-              Disclaimer
-            </Link>
-          </div>
         </div>
       </div>
     </footer>
