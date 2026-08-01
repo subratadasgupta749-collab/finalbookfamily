@@ -16,15 +16,22 @@ export const Route = createFileRoute("/disclaimer")({
   component: () => (
     <SiteLayout>
       <PageShell eyebrow="Legal" title="Disclaimer" description={`Last updated: ${new Date().toLocaleDateString()}`}>
-        <p>My Family History Book is provided for personal use to help you record and preserve family memories.</p>
-        <h2>No professional advice</h2>
-        <p>Content on this website is for informational purposes only and is not a substitute for professional advice.</p>
-        <h2>User-generated content</h2>
-        <p>Stories, photos, and other content added by users represent the views of those users, not of My Family History Book.</p>
-        <h2>Third-party links</h2>
-        <p>The service may include links to third-party sites. We are not responsible for the content or practices of those sites.</p>
-        <h2>Limitation of liability</h2>
-        <p>To the maximum extent permitted by law, we are not liable for any indirect or consequential loss arising from your use of the service.</p>
+        <p>The information provided by My Family History Book on our website and application is for general informational purposes only.</p>
+        
+        <h2>1. No Guarantee of Results</h2>
+        <p>While our AI tools are designed to assist you in writing and formatting your family history, we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, or completeness of the AI-generated content. You are responsible for reviewing and editing all content before printing.</p>
+        
+        <h2>2. External Links Disclaimer</h2>
+        <p>Our website may contain links to external websites that are not provided or maintained by or in any way affiliated with us. Please note that we do not guarantee the accuracy, relevance, timeliness, or completeness of any information on these external websites.</p>
+        
+        <h2>3. Third-Party Tools</h2>
+        <p>We use third-party tools (such as OpenAI/Anthropic/Google for AI generation, and Stripe/LemonSqueezy for payments). We are not responsible for any downtime, errors, or policies enacted by these third-party providers.</p>
+        
+        <h2>4. Not Legal or Professional Advice</h2>
+        <p>The service and any generated books do not constitute legal, medical, or professional advice. Use of the service is solely at your own risk.</p>
+        
+        <h2>5. Contact Us</h2>
+        <p>For any questions regarding this disclaimer, please contact us at hello@myfamilyhistorybook.app.</p>
       </PageShell>
     </SiteLayout>
   ),

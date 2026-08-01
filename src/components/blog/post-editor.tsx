@@ -11,6 +11,10 @@ import { Plus, Trash2, ArrowLeft, Save, Upload, Loader2 } from "lucide-react";
 import { adminGetPost, createPost, updatePost, BLOG_CATEGORY, type BlogPostInput } from "@/lib/blog.functions";
 import { slugify } from "@/lib/slugify";
 import { supabase } from "@/integrations/supabase/client";
+import { lazy, Suspense } from "react";
+import "react-quill/dist/quill.snow.css";
+
+const ReactQuill = lazy(() => import("react-quill"));
 
 type FAQ = { q: string; a: string };
 
@@ -20,6 +24,7 @@ export function PostEditor(props: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(props.mode === "edit");
   const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -52,6 +57,7 @@ export function PostEditor(props: Props) {
   };
 
   useEffect(() => {
+    setMounted(true);
     if (props.mode !== "edit") return;
     (async () => {
       try {
@@ -66,6 +72,16 @@ export function PostEditor(props: Props) {
       finally { setLoading(false); }
     })();
   }, []);
+
+  const editorModules = {
+    toolbar: [
+      [{ 'header': [1, 2, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['link', 'image'],
+      ['clean']
+    ],
+  };
 
   const onTitle = (v: string) => {
     setTitle(v);
@@ -154,9 +170,17 @@ export function PostEditor(props: Props) {
       </Card>
 
       <Card className="p-6 space-y-2">
-        <Label>Content (HTML supported)</Label>
-        <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={18}
-          className="font-mono text-sm" placeholder="Write your post…" />
+        <Label>Content</Label>
+        <div className="min-h-[400px]">
+          {mounted ? (
+            <Suspense fallback={<p className="text-sm text-muted-foreground p-4">Loading editor…</p>}>
+              <ReactQuill theme="snow" value={content} onChange={setContent} modules={editorModules} className="h-[350px] pb-12" />
+            </Suspense>
+          ) : (
+            <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={18}
+              className="font-mono text-sm" placeholder="Loading editor…" disabled />
+          )}
+        </div>
       </Card>
 
       <Card className="p-6 space-y-4">

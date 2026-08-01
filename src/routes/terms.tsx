@@ -16,19 +16,29 @@ export const Route = createFileRoute("/terms")({
   component: () => (
     <SiteLayout>
       <PageShell eyebrow="Legal" title="Terms & Conditions" description={`Last updated: ${new Date().toLocaleDateString()}`}>
-        <p>By creating an account or using My Family History Book, you agree to these terms.</p>
-        <h2>Your account</h2>
-        <p>You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account.</p>
-        <h2>Your content</h2>
-        <p>You own the stories, photos, and other content you add. You grant us a limited license to store and display that content solely to provide the service to you.</p>
-        <h2>Acceptable use</h2>
-        <p>Do not use the service to upload unlawful content, harass others, or interfere with the security or operation of the service.</p>
-        <h2>Termination</h2>
-        <p>You may stop using the service at any time. We may suspend or terminate accounts that violate these terms.</p>
-        <h2>Disclaimer of warranties</h2>
-        <p>The service is provided "as is" without warranties of any kind, to the fullest extent permitted by law.</p>
-        <h2>Contact</h2>
-        <p>For questions about these terms, contact hello@myfamilyhistorybook.app.</p>
+        <p>By accessing or using My Family History Book, you agree to be bound by these Terms & Conditions.</p>
+        
+        <h2>1. Account Responsibilities</h2>
+        <p>You must provide accurate information when creating an account. You are solely responsible for safeguarding your password and for all activities that occur under your account.</p>
+        
+        <h2>2. Purchases, Subscriptions, and Refunds</h2>
+        <p><strong>Payments:</strong> All purchases (whether one-time or subscription-based) are processed securely through our authorized payment gateways. By providing payment information, you authorize us and our payment processors to charge the designated amounts.</p>
+        <p><strong>Refund Policy:</strong> We offer a 30-day money-back guarantee for digital services if you are unsatisfied, provided the final print-ready PDF has not been exported or physical books have not been sent to printing. Physical book purchases are custom-printed and are generally non-refundable unless damaged or defective upon arrival.</p>
+        
+        <h2>3. User Content and License</h2>
+        <p>You retain full ownership of all stories, photos, and information you upload ("User Content"). By uploading, you grant us a non-exclusive, worldwide, royalty-free license to host, process, and display your User Content strictly for the purpose of providing the service to you.</p>
+        
+        <h2>4. Acceptable Use Policy</h2>
+        <p>You agree not to use the service to upload illegal, offensive, or copyright-infringing material. We reserve the right to remove content or terminate accounts that violate these terms or abuse our platform.</p>
+        
+        <h2>5. Limitation of Liability</h2>
+        <p>To the maximum extent permitted by law, My Family History Book shall not be liable for any indirect, incidental, or consequential damages resulting from your use of the service. The service is provided on an "AS IS" and "AS AVAILABLE" basis.</p>
+        
+        <h2>6. Changes to Terms</h2>
+        <p>We may modify these terms at any time. Continued use of the service constitutes acceptance of the modified terms.</p>
+        
+        <h2>7. Contact</h2>
+        <p>For billing inquiries, refund requests, or questions about these terms, contact us at hello@myfamilyhistorybook.app.</p>
       </PageShell>
     </SiteLayout>
   ),
