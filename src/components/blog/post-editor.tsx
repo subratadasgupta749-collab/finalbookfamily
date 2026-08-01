@@ -11,10 +11,7 @@ import { Plus, Trash2, ArrowLeft, Save, Upload, Loader2 } from "lucide-react";
 import { adminGetPost, createPost, updatePost, BLOG_CATEGORY, type BlogPostInput } from "@/lib/blog.functions";
 import { slugify } from "@/lib/slugify";
 import { supabase } from "@/integrations/supabase/client";
-import { lazy, Suspense } from "react";
-import "react-quill/dist/quill.snow.css";
-
-const ReactQuill = lazy(() => import("react-quill"));
+import "quill/dist/quill.snow.css";
 
 type FAQ = { q: string; a: string };
 
@@ -24,7 +21,8 @@ export function PostEditor(props: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(props.mode === "edit");
   const [saving, setSaving] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const quillRef = useRef<any>(null);
 
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -57,7 +55,6 @@ export function PostEditor(props: Props) {
   };
 
   useEffect(() => {
-    setMounted(true);
     if (props.mode !== "edit") return;
     (async () => {
       try {
@@ -73,15 +70,38 @@ export function PostEditor(props: Props) {
     })();
   }, []);
 
-  const editorModules = {
-    toolbar: [
-      [{ 'header': [1, 2, false] }],
-      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      ['link', 'image'],
-      ['clean']
-    ],
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let isMounted = true;
+    (async () => {
+      const Quill = (await import("quill")).default;
+      if (!isMounted || !editorContainerRef.current) return;
+      if (!quillRef.current) {
+        quillRef.current = new Quill(editorContainerRef.current, {
+          theme: "snow",
+          modules: {
+            toolbar: [
+              [{ 'header': [1, 2, false] }],
+              ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+              [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+              ['link', 'image'],
+              ['clean']
+            ]
+          }
+        });
+        quillRef.current.on("text-change", () => {
+          setContent(quillRef.current.root.innerHTML);
+        });
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (quillRef.current && content !== quillRef.current.root.innerHTML) {
+      quillRef.current.root.innerHTML = content;
+    }
+  }, [content, loading]);
 
   const onTitle = (v: string) => {
     setTitle(v);
@@ -172,14 +192,7 @@ export function PostEditor(props: Props) {
       <Card className="p-6 space-y-2">
         <Label>Content</Label>
         <div className="min-h-[400px]">
-          {mounted ? (
-            <Suspense fallback={<p className="text-sm text-muted-foreground p-4">Loading editor…</p>}>
-              <ReactQuill theme="snow" value={content} onChange={setContent} modules={editorModules} className="h-[350px] pb-12" />
-            </Suspense>
-          ) : (
-            <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={18}
-              className="font-mono text-sm" placeholder="Loading editor…" disabled />
-          )}
+          <div ref={editorContainerRef} className="h-[350px] pb-12" />
         </div>
       </Card>
 
