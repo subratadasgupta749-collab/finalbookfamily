@@ -38,7 +38,7 @@ export const Route = createFileRoute("/terms")({
         <p>We may modify these terms at any time. Continued use of the service constitutes acceptance of the modified terms.</p>
         
         <h2>7. Contact</h2>
-        <p>For billing inquiries, refund requests, or questions about these terms, contact us at hello@myfamilyhistorybook.app.</p>
+        <p>For billing inquiries, refund requests, or questions about these terms, contact us at support@myfamilyhistorybook.com.</p>
       </PageShell>
     </SiteLayout>
   ),

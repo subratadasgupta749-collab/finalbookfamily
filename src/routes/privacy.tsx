@@ -52,7 +52,7 @@ export const Route = createFileRoute("/privacy")({
         <p>Depending on your location (such as under GDPR or CCPA), you may have the right to access, update, correct, or delete your personal information. You can manage your data directly in your account settings or request complete deletion by contacting us.</p>
 
         <h2>6. Contact Us</h2>
-        <p>If you have any questions about this Privacy Policy, please contact us at hello@myfamilyhistorybook.app.</p>
+        <p>If you have any questions about this Privacy Policy, please contact us at support@myfamilyhistorybook.com.</p>
       </PageShell>
     </SiteLayout>
   ),

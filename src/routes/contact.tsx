@@ -63,7 +63,7 @@ function ContactPage() {
           </p>
           <div className="mt-8 flex items-center gap-3 text-sm text-muted-foreground">
             <Mail className="h-4 w-4 text-primary" />
-            hello@myfamilyhistorybook.app
+            support@myfamilyhistorybook.com
           </div>
         </div>
 

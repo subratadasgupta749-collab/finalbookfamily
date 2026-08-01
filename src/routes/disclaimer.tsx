@@ -31,7 +31,7 @@ export const Route = createFileRoute("/disclaimer")({
         <p>The service and any generated books do not constitute legal, medical, or professional advice. Use of the service is solely at your own risk.</p>
         
         <h2>5. Contact Us</h2>
-        <p>For any questions regarding this disclaimer, please contact us at hello@myfamilyhistorybook.app.</p>
+        <p>For any questions regarding this disclaimer, please contact us at support@myfamilyhistorybook.com.</p>
       </PageShell>
     </SiteLayout>
   ),

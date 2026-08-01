@@ -39,7 +39,7 @@ export const Route = createFileRoute("/cookies")({
         <p>We may update this Cookie Policy from time to time in order to reflect, for example, changes to the cookies we use or for other operational, legal, or regulatory reasons.</p>
         
         <h2>6. Contact Us</h2>
-        <p>If you have any questions about our use of cookies or other technologies, please contact us at hello@myfamilyhistorybook.app.</p>
+        <p>If you have any questions about our use of cookies or other technologies, please contact us at support@myfamilyhistorybook.com.</p>
       </PageShell>
     </SiteLayout>
   ),
