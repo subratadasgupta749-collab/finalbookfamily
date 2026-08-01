@@ -1,0 +1,17 @@
+# My Family History Book
+
+> A calm, private place to preserve your family's stories, photos, and voices — arranged into a beautifully crafted book made to be shared for generations.
+
+## About
+- [Home](/): Product overview, pricing, and getting started
+- [About](/about): Our mission and how the product is built
+- [Contact](/contact): Get in touch with the team
+
+## Content
+- [Blog](/blog): Guides on preserving family stories, memoirs, and legacy
+
+## Legal
+- [Privacy Policy](/privacy)
+- [Terms & Conditions](/terms)
+- [Cookie Policy](/cookies)
+- [Disclaimer](/disclaimer)

@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /admin
+Disallow: /checkout
+Disallow: /orders
+Disallow: /referrals
+Disallow: /books

@@ -1,0 +1,1 @@
+ALTER TYPE public.book_theme ADD VALUE IF NOT EXISTS 'timeline_split';
