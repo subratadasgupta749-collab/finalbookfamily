@@ -253,7 +253,7 @@ const AUTHOR_SOCIAL_ICONS: Record<string, { Icon: typeof Facebook; label: string
   facebook: { Icon: Facebook, label: "Facebook" },
   instagram: { Icon: Instagram, label: "Instagram" },
   youtube: { Icon: Youtube, label: "YouTube" },
-  pinterest: { Icon: ImageIcon, label: "Pinterest" },
+  pinterest: { Icon: PinterestIcon, label: "Pinterest" },
   x: { Icon: Twitter, label: "X" },
   twitter: { Icon: Twitter, label: "Twitter" },
   threads: { Icon: AtSign, label: "Threads" },
@@ -261,8 +261,24 @@ const AUTHOR_SOCIAL_ICONS: Record<string, { Icon: typeof Facebook; label: string
   tiktok: { Icon: Music2, label: "TikTok" },
   whatsapp: { Icon: MessageCircle, label: "WhatsApp" },
   telegram: { Icon: Send, label: "Telegram" },
-  quora: { Icon: HelpCircle, label: "Quora" },
+  quora: { Icon: QuoraIcon, label: "Quora" },
 };
+
+function PinterestIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}>
+      <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.163 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z"/>
+    </svg>
+  );
+}
+
+function QuoraIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}>
+      <path d="M11.996 2C6.262 2 1.611 6.512 1.611 12.064c0 4.148 2.457 7.72 6.002 9.273l-1.066 1.494c-.161.226-.264.512-.039.715.225.203.541.137.747-.052l2.678-2.464c.669.11 1.358.167 2.063.167 5.735 0 10.386-4.512 10.386-10.064C22.382 6.512 17.731 2 11.996 2zm-1.875 14.502c-3.158 0-5.717-2.559-5.717-5.717 0-3.158 2.559-5.717 5.717-5.717 3.158 0 5.717 2.559 5.717 5.717 0 1.258-.403 2.421-1.082 3.364l1.328 1.488-1.554 1.386-1.096-1.228a5.69 5.69 0 0 1-3.313 1.024zm2.144-8.883c-1.319-1.319-3.456-1.319-4.775 0-1.319 1.319-1.319 3.456 0 4.775 1.319 1.319 3.456 1.319 4.775 0 1.319-1.319 1.319-3.456 0-4.775z"/>
+    </svg>
+  );
+}
 
 function AuthorBox({ author }: { author: { full_name: string | null; avatar_url: string | null; bio?: string | null; social?: Record<string, string> } | null }) {
   const links = Object.entries(AUTHOR_SOCIAL_ICONS)
