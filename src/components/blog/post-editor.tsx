@@ -81,8 +81,9 @@ export function PostEditor(props: Props) {
           theme: "snow",
           modules: {
             toolbar: [
-              [{ 'header': [1, 2, false] }],
+              [{ 'header': [1, 2, 3, false] }],
               ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+              [{ 'align': [] }],
               [{ 'list': 'ordered' }, { 'list': 'bullet' }],
               ['link', 'image'],
               ['clean']
@@ -191,8 +192,19 @@ export function PostEditor(props: Props) {
 
       <Card className="p-6 space-y-2">
         <Label>Content</Label>
-        <div className="min-h-[400px]">
-          <div ref={editorContainerRef} className="h-[350px] pb-12" />
+        <div className="flex flex-col">
+          <style>{`
+            .ql-container { min-height: 400px; font-size: 16px; border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; }
+            .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background: #f8fafc; }
+            .ql-editor { min-height: 400px; }
+            .dark .ql-toolbar { background: #1e293b; border-color: #334155; }
+            .dark .ql-container { border-color: #334155; }
+            .dark .ql-picker-options { background: #1e293b; border-color: #334155; }
+            .dark .ql-stroke { stroke: #cbd5e1; }
+            .dark .ql-fill { fill: #cbd5e1; }
+            .dark .ql-picker { color: #cbd5e1; }
+          `}</style>
+          <div ref={editorContainerRef} />
         </div>
       </Card>
 
