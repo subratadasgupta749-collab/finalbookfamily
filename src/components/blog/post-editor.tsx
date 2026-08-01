@@ -71,7 +71,7 @@ export function PostEditor(props: Props) {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || loading) return;
     let isMounted = true;
     (async () => {
       const Quill = (await import("quill")).default;
@@ -96,7 +96,7 @@ export function PostEditor(props: Props) {
       }
     })();
     return () => { isMounted = false; };
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
     if (quillRef.current && content !== quillRef.current.root.innerHTML) {
