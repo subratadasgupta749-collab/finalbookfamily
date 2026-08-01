@@ -23,16 +23,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { SiteLayout } from "@/components/site-layout";
 
-import hero from "@/assets/hero.jpg.asset.json";
-import book1 from "@/assets/book1.jpg.asset.json";
-import book2 from "@/assets/book2.jpg.asset.json";
-import book3 from "@/assets/book3.jpg.asset.json";
-import openbook from "@/assets/openbook.jpg.asset.json";
-import cta from "@/assets/cta.jpg.asset.json";
-import story from "@/assets/story.jpg.asset.json";
-import t1 from "@/assets/t1.jpg.asset.json";
-import t2 from "@/assets/t2.jpg.asset.json";
-import t3 from "@/assets/t3.jpg.asset.json";
+const hero = { url: "/images/hero.png" };
+const book1 = { url: "/images/book1.png" };
+const book2 = { url: "/images/book2.png" };
+const book3 = { url: "/images/book3.png" };
+const openbook = { url: "/images/openbook.png" };
+const cta = { url: "/images/cta.png" };
+const story = { url: "/images/book1.png" };
+const t1 = { url: "/images/t1.png" };
+const t2 = { url: "/images/t2.png" };
+const t3 = { url: "/images/t3.png" };
 
 export const Route = createFileRoute("/")({
   head: () => ({
