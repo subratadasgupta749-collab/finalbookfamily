@@ -128,6 +128,51 @@ export const setUserRole = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const adminUpdateUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string; email: string; full_name: string }) =>
+    z.object({
+      userId: z.string().uuid(),
+      email: z.string().email(),
+      full_name: z.string().min(1).max(255),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const admin = (await import("@/integrations/supabase/client.server")).supabaseAdmin;
+    
+    // Update auth user
+    const { error: authErr } = await admin.auth.admin.updateUserById(data.userId, {
+      email: data.email,
+      user_metadata: { full_name: data.full_name },
+      email_confirm: true, // Auto-confirm email change
+    });
+    if (authErr) throw new Error(authErr.message);
+
+    // Sync profile
+    const { error: profErr } = await admin.from("profiles").update({
+      email: data.email,
+      full_name: data.full_name,
+    }).eq("id", data.userId);
+    if (profErr) throw new Error(profErr.message);
+
+    return { ok: true };
+  });
+
+export const adminDeleteUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => z.object({ userId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    if (data.userId === context.userId) {
+      throw new Error("You cannot delete yourself.");
+    }
+    const admin = (await import("@/integrations/supabase/client.server")).supabaseAdmin;
+    const { error } = await admin.auth.admin.deleteUser(data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 /* ---------------- Books ---------------- */
 
 export const adminListBooks = createServerFn({ method: "GET" })

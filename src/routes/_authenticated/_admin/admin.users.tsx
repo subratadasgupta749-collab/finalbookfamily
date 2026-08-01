@@ -8,6 +8,13 @@ import { Switch } from "@/components/ui/switch";
 import { AdminPageHeader, FiltersBar, Pager, useDebounced } from "@/components/admin/table-controls";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { toast } from "sonner";
+import { Edit2, Trash2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { useServerFn } from "@tanstack/react-start";
+import { adminUpdateUser, adminDeleteUser } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/users")({
   head: () => ({ meta: [{ title: "Users — Admin" }, { name: "robots", content: "noindex" }] }),
@@ -21,6 +28,11 @@ function UsersPage() {
   const pageSize = 20;
   const [data, setData] = useState<Awaited<ReturnType<typeof listUsers>>>({ rows: [], total: 0 });
   const [busy, setBusy] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [deletingUser, setDeletingUser] = useState<any>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const updateUserFn = useServerFn(adminUpdateUser);
+  const deleteUserFn = useServerFn(adminDeleteUser);
 
   const load = () => {
     setBusy(true);
@@ -45,6 +57,32 @@ function UsersPage() {
     }))));
   };
 
+  const onEditSave = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const email = fd.get("email") as string;
+    const full_name = fd.get("full_name") as string;
+    setActionBusy(true);
+    try {
+      await updateUserFn({ data: { userId: editingUser.id, email, full_name } });
+      toast.success("User updated");
+      setEditingUser(null);
+      load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setActionBusy(false); }
+  };
+
+  const onDeleteConfirm = async () => {
+    setActionBusy(true);
+    try {
+      await deleteUserFn({ data: { userId: deletingUser.id } });
+      toast.success("User deleted");
+      setDeletingUser(null);
+      load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setActionBusy(false); }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <AdminPageHeader title="Users" subtitle={`${data.total.toLocaleString()} total`} />
@@ -57,12 +95,13 @@ function UsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Roles</TableHead>
               <TableHead>Joined</TableHead>
-              <TableHead className="text-right">Admin</TableHead>
+              <TableHead className="text-center">Admin</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {busy && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-            {!busy && data.rows.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No users</TableCell></TableRow>}
+            {busy && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+            {!busy && data.rows.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No users</TableCell></TableRow>}
             {data.rows.map((u: any) => {
               const isAdmin = (u.roles || []).includes("admin");
               return (
@@ -77,8 +116,18 @@ function UsersPage() {
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(u.created_at).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-center">
                     <Switch checked={isAdmin} onCheckedChange={() => toggleRole(u.id, isAdmin)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setEditingUser(u)} title="Edit user">
+                        <Edit2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeletingUser(u)} title="Delete user">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -87,6 +136,50 @@ function UsersPage() {
         </Table>
         <div className="px-4 py-3"><Pager page={page} pageSize={pageSize} total={data.total} onPage={setPage} /></div>
       </Card>
+
+      <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          {editingUser && (
+            <form onSubmit={onEditSave} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input name="full_name" defaultValue={editingUser.full_name || ""} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input name="email" type="email" defaultValue={editingUser.email || ""} required />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
+                <Button type="submit" disabled={actionBusy}>
+                  {actionBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deletingUser} onOpenChange={(o) => !o && setDeletingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {deletingUser?.full_name || deletingUser?.email}? 
+              This will permanently remove their account, books, photos, and all associated data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingUser(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={onDeleteConfirm} disabled={actionBusy}>
+              {actionBusy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
