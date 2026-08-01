@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { Plus, Trash2, ArrowLeft, Save, Upload, Loader2 } from "lucide-react";
 import { adminGetPost, createPost, updatePost, BLOG_CATEGORY, type BlogPostInput } from "@/lib/blog.functions";
 import { slugify } from "@/lib/slugify";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { uploadBlobFn } from "@/lib/blob.functions";
 import "quill/dist/quill.snow.css";
 
 type FAQ = { q: string; a: string };
@@ -23,6 +24,7 @@ export function PostEditor(props: Props) {
   const [saving, setSaving] = useState(false);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<any>(null);
+  const uploadFn = useServerFn(uploadBlobFn);
 
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -42,13 +44,11 @@ export function PostEditor(props: Props) {
     if (file.size > 8 * 1024 * 1024) { toast.error("Image must be under 8MB"); return; }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from("blog-images").upload(path, file, {
-        contentType: file.type, upsert: false,
-      });
-      if (error) throw error;
-      setFeatured(`/api/public/blog-images/${path}`);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("prefix", "blog-images");
+      const { url } = await uploadFn({ data: formData });
+      setFeatured(url);
       toast.success("Image uploaded");
     } catch (e: any) { toast.error(e.message || "Upload failed"); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }

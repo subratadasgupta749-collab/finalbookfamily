@@ -66,10 +66,17 @@ export async function loadBookData(supabase: any, bookId: string) {
   const photos: BookPhoto[] = [];
   for (const p of (photoRows ?? []).slice(0, 40)) {
     try {
-      const { data: blob } = await supabase.storage.from("photos").download(p.storage_path);
-      if (!blob) continue;
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      const mime = (p.mime_type as string) || (blob as any).type || "";
+      let bytes: Uint8Array;
+      if (p.storage_path.startsWith("http")) {
+        const res = await fetch(p.storage_path);
+        if (!res.ok) continue;
+        bytes = new Uint8Array(await res.arrayBuffer());
+      } else {
+        const { data: blob } = await supabase.storage.from("photos").download(p.storage_path);
+        if (!blob) continue;
+        bytes = new Uint8Array(await blob.arrayBuffer());
+      }
+      const mime = (p.mime_type as string) || "";
       photos.push({
         id: p.id as string,
         category: p.category as string,

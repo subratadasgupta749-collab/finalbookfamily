@@ -93,12 +93,10 @@ export const generateExport = createServerFn({ method: "POST" })
     const path = `${context.userId}/${data.bookId}/${filename}`;
     const stableBytes: Uint8Array<ArrayBuffer> = new Uint8Array(bytes.byteLength);
     stableBytes.set(bytes);
-    const uploadBody = new Blob([stableBytes.buffer], { type: contentType });
+    const blobFile = new File([stableBytes.buffer], filename, { type: contentType });
 
-    const { error: upErr } = await context.supabase.storage
-      .from("book-exports")
-      .upload(path, uploadBody, { contentType, upsert: false });
-    if (upErr) throw new Error(upErr.message);
+    const { put } = await import("@vercel/blob");
+    const blob = await put(`exports/${path}`, blobFile, { access: "public" });
 
     const { data: row, error: insErr } = await context.supabase
       .from("book_exports")
@@ -106,20 +104,15 @@ export const generateExport = createServerFn({ method: "POST" })
         book_id: data.bookId,
         user_id: context.userId,
         kind: data.kind,
-        storage_path: path,
+        storage_path: blob.url,
         filename,
-        size_bytes: uploadBody.size,
+        size_bytes: blobFile.size,
       })
       .select()
       .single();
     if (insErr) throw new Error(insErr.message);
 
-    const { data: signed, error: signErr } = await context.supabase.storage
-      .from("book-exports")
-      .createSignedUrl(path, 60 * 60);
-    if (signErr) throw new Error(signErr.message);
-
-    return { ...row, url: signed?.signedUrl ?? null };
+    return { ...row, url: blob.url };
   });
 
 export const listExports = createServerFn({ method: "GET" })
@@ -135,18 +128,10 @@ export const listExports = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 
-    const paths = (rows ?? []).map((r: any) => r.storage_path);
-    let urlMap = new Map<string, string>();
-    if (paths.length > 0) {
-      const { data: signed, error: sErr } = await context.supabase.storage
-        .from("book-exports")
-        .createSignedUrls(paths, 60 * 60);
-      if (sErr) throw new Error(sErr.message);
-      urlMap = new Map(
-        (signed ?? []).map((s: any) => [s.path as string, s.signedUrl as string]),
-      );
-    }
-    return (rows ?? []).map((r: any) => ({ ...r, url: urlMap.get(r.storage_path) ?? null }));
+    // For backwards compatibility, if the storage_path is not a full URL, it might be a legacy Supabase path.
+    // In that case we won't show it or we can just leave it as is (it will fail to load).
+    // For Vercel Blob, storage_path is the full URL.
+    return (rows ?? []).map((r: any) => ({ ...r, url: r.storage_path }));
   });
 
 export const deleteExport = createServerFn({ method: "POST" })
@@ -162,7 +147,12 @@ export const deleteExport = createServerFn({ method: "POST" })
       .maybeSingle();
     if (fErr) throw new Error(fErr.message);
     if (!row) return { ok: true, alreadyDeleted: true };
-    await context.supabase.storage.from("book-exports").remove([row.storage_path]);
+    
+    if (row.storage_path.includes("public.blob.vercel-storage.com")) {
+      const { del } = await import("@vercel/blob");
+      await del(row.storage_path);
+    }
+    
     const { error } = await context.supabase.from("book_exports").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };

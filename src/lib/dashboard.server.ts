@@ -72,22 +72,12 @@ export async function loadDashboard(ctx: Ctx) {
   const books = (booksRes.data ?? []) as any[];
   const bookName = new Map(books.map((b) => [b.id, b.name as string]));
 
-  // Signed URLs for the most recent exports.
+  // URLs for the most recent exports (now public Vercel Blob URLs)
   const exportRows = (exportsRes.data ?? []) as any[];
-  let urlMap = new Map<string, string>();
-  if (exportRows.length > 0) {
-    const { data: signed } = await supabase.storage
-      .from("book-exports")
-      .createSignedUrls(
-        exportRows.map((r) => r.storage_path),
-        60 * 60,
-      );
-    urlMap = new Map((signed ?? []).map((s: any) => [s.path as string, s.signedUrl as string]));
-  }
   const downloads = exportRows.map((r) => ({
     ...r,
     book_name: bookName.get(r.book_id) ?? null,
-    url: urlMap.get(r.storage_path) ?? null,
+    url: r.storage_path,
   }));
 
   const orders = (ordersRes.data ?? []) as any[];

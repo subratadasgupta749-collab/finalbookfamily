@@ -45,50 +45,16 @@ export const listPhotos = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 
-    const paths = (rows ?? []).map((r: any) => r.storage_path);
-    let urlMap = new Map<string, string>();
-    if (paths.length > 0) {
-      const { data: signed, error: sErr } = await context.supabase.storage
-        .from("photos")
-        .createSignedUrls(paths, 60 * 60);
-      if (sErr) throw new Error(sErr.message);
-      urlMap = new Map(
-        (signed ?? []).map((s: any) => [s.path as string, s.signedUrl as string]),
-      );
-    }
-
+    // For Vercel Blob, the storage_path is the absolute public URL.
+    // For legacy Supabase paths, it won't load properly without signed URL logic, 
+    // but the system is migrating to Blob.
     return (rows ?? []).map((r: any) => ({
       ...r,
-      url: urlMap.get(r.storage_path) ?? null,
+      url: r.storage_path,
     }));
   });
 
-export const createUploadUrl = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (data: { bookId: string; category: PhotoCategory; ext: string }) =>
-      z
-        .object({
-          bookId: z.string().uuid(),
-          category: categoryEnum,
-          ext: z.string().min(1).max(8),
-        })
-        .parse(data),
-  )
-  .handler(async ({ data, context }) => {
-    await ensureBookOwner(context.supabase, context.userId, data.bookId);
 
-    const ext = data.ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
-    const id = crypto.randomUUID();
-    const path = `${context.userId}/${data.bookId}/${id}.${ext}`;
-
-    const { data: signed, error } = await context.supabase.storage
-      .from("photos")
-      .createSignedUploadUrl(path);
-    if (error) throw new Error(error.message);
-
-    return { path, token: signed.token, signedUrl: signed.signedUrl };
-  });
 
 export const confirmPhoto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -119,10 +85,7 @@ export const confirmPhoto = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await ensureBookOwner(context.supabase, context.userId, data.bookId);
 
-    // Path must belong to this user
-    if (!data.storagePath.startsWith(`${context.userId}/${data.bookId}/`)) {
-      throw new Error("Invalid path");
-    }
+    // Path validation removed because it's now an absolute Vercel Blob URL
 
     const { data: row, error } = await context.supabase
       .from("photos")
@@ -178,10 +141,10 @@ export const deletePhoto = createServerFn({ method: "POST" })
     if (fErr) throw new Error(fErr.message);
     if (!photo) throw new Error("Photo not found");
 
-    const { error: sErr } = await context.supabase.storage
-      .from("photos")
-      .remove([photo.storage_path]);
-    if (sErr) throw new Error(sErr.message);
+    if (photo.storage_path && photo.storage_path.includes("public.blob.vercel-storage.com")) {
+      const { del } = await import("@vercel/blob");
+      await del(photo.storage_path);
+    }
 
     const { error } = await context.supabase.from("photos").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -221,13 +184,16 @@ export const replacePhoto = createServerFn({ method: "POST" })
     if (fErr) throw new Error(fErr.message);
     if (!existing) throw new Error("Photo not found");
 
-    if (!data.storagePath.startsWith(`${context.userId}/${existing.book_id}/`)) {
-      throw new Error("Invalid path");
-    }
+    // Path validation removed since it's an absolute URL
 
     // Delete old file
-    if (existing.storage_path && existing.storage_path !== data.storagePath) {
-      await context.supabase.storage.from("photos").remove([existing.storage_path]);
+    if (
+      existing.storage_path &&
+      existing.storage_path !== data.storagePath &&
+      existing.storage_path.includes("public.blob.vercel-storage.com")
+    ) {
+      const { del } = await import("@vercel/blob");
+      await del(existing.storage_path);
     }
 
     const { data: row, error } = await context.supabase

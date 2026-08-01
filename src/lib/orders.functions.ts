@@ -31,13 +31,5 @@ export const getMyOrderDownloads = createServerFn({ method: "GET" })
       .eq("user_id", context.userId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    const paths = (exports_ ?? []).map((r: any) => r.storage_path);
-    if (paths.length === 0) return [];
-    const { data: signed } = await context.supabase.storage
-      .from("book-exports")
-      .createSignedUrls(paths, 60 * 60);
-    const map = new Map(
-      (signed ?? []).map((s: any) => [s.path as string, s.signedUrl as string]),
-    );
-    return (exports_ ?? []).map((r: any) => ({ ...r, url: map.get(r.storage_path) ?? null }));
+    return (exports_ ?? []).map((r: any) => ({ ...r, url: r.storage_path }));
   });

@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Upload, Loader2, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { uploadBlobFn } from "@/lib/blob.functions";
 
 type Props = {
   value: string;
@@ -34,6 +35,7 @@ export function ImageUploadField({
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const uploadFn = useServerFn(uploadBlobFn);
 
   const onFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -46,13 +48,12 @@ export function ImageUploadField({
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage
-        .from("blog-images")
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      onChange(`/api/public/blog-images/${path}`);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("prefix", folder);
+      
+      const { url } = await uploadFn({ data: formData });
+      onChange(url);
       toast.success("Image uploaded");
     } catch (e: any) {
       toast.error(e.message || "Upload failed");

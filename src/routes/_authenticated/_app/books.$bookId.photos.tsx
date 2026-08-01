@@ -36,12 +36,12 @@ import {
   PHOTO_CATEGORIES,
   type PhotoCategory,
   listPhotos,
-  createUploadUrl,
   confirmPhoto,
   deletePhoto,
   renamePhoto,
   replacePhoto,
 } from "@/lib/photos.functions";
+import { uploadBlobFn } from "@/lib/blob.functions";
 
 const photosQueryOptions = (bookId: string) =>
   queryOptions({
@@ -95,7 +95,7 @@ function PhotosPage() {
 
   const { data: photos = [], isLoading } = useQuery(photosQueryOptions(bookId));
 
-  const createUrlFn = useServerFn(createUploadUrl);
+  const uploadFn = useServerFn(uploadBlobFn);
   const confirmFn = useServerFn(confirmPhoto);
   const deleteFn = useServerFn(deletePhoto);
   const renameFn = useServerFn(renamePhoto);
@@ -135,21 +135,18 @@ function PhotosPage() {
         }
         try {
           const compressed = await compressImage(file);
-          const { path, token } = await createUrlFn({
-            data: { bookId, category, ext: compressed.ext },
-          });
-          const { error: upErr } = await supabase.storage
-            .from("photos")
-            .uploadToSignedUrl(path, token, compressed.blob, {
-              contentType: compressed.mimeType,
-            });
-          if (upErr) throw new Error(upErr.message);
+          
+          const formData = new FormData();
+          formData.append("file", compressed.blob, file.name);
+          formData.append("prefix", "photos");
+          
+          const { url } = await uploadFn({ data: formData });
 
           await confirmFn({
             data: {
               bookId,
               category,
-              storagePath: path,
+              storagePath: url,
               filename: file.name,
               sizeBytes: compressed.sizeBytes,
               width: compressed.width,
@@ -173,19 +170,17 @@ function PhotosPage() {
     setUploading(true);
     try {
       const compressed = await compressImage(file);
-      const { path, token } = await createUrlFn({
-        data: { bookId, category: photo.category, ext: compressed.ext },
-      });
-      const { error: upErr } = await supabase.storage
-        .from("photos")
-        .uploadToSignedUrl(path, token, compressed.blob, {
-          contentType: compressed.mimeType,
-        });
-      if (upErr) throw new Error(upErr.message);
+      
+      const formData = new FormData();
+      formData.append("file", compressed.blob, file.name);
+      formData.append("prefix", "photos");
+      
+      const { url } = await uploadFn({ data: formData });
+      
       await replaceFn({
         data: {
           id: photo.id,
-          storagePath: path,
+          storagePath: url,
           filename: file.name,
           sizeBytes: compressed.sizeBytes,
           width: compressed.width,
