@@ -55,9 +55,21 @@ function PostPage() {
     description: post.meta_description || post.excerpt || "",
     image: post.featured_image_url ? [post.featured_image_url] : undefined,
     datePublished: post.published_at,
+    dateModified: post.updated_at || post.published_at,
     author: author?.full_name ? { "@type": "Person", name: author.full_name } : undefined,
+    publisher: {
+      "@type": "Organization",
+      name: "My Family History Book",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://myfamilyhistorybook.com/images/hero.png"
+      }
+    },
     articleSection: post.category,
-    mainEntityOfPage: `/blog/${post.slug}`,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `https://myfamilyhistorybook.com/blog/${post.slug}`
+    },
   };
   const faqLd = faqArr.length > 0 ? {
     "@context": "https://schema.org",
