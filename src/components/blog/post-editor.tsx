@@ -54,21 +54,44 @@ export function PostEditor(props: Props) {
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
+  const contentRef = useRef(content);
+  contentRef.current = content;
+
+  const postId = props.mode === "edit" ? props.postId : null;
+
   useEffect(() => {
-    if (props.mode !== "edit") return;
+    if (props.mode !== "edit" || !postId) return;
+    let active = true;
+    setLoading(true);
     (async () => {
       try {
-        const p = await adminGetPost({ data: { id: props.postId } });
-        setTitle(p.title); setSlug(p.slug); setSlugTouched(true);
-        setExcerpt(p.excerpt ?? ""); setContent(p.content ?? "");
+        const p = await adminGetPost({ data: { id: postId } });
+        if (!active) return;
+        setTitle(p.title);
+        setSlug(p.slug);
+        setSlugTouched(true);
+        setExcerpt(p.excerpt ?? "");
+        const loadedContent = p.content ?? "";
+        setContent(loadedContent);
+        contentRef.current = loadedContent;
+        if (quillRef.current && quillRef.current.root.innerHTML !== loadedContent) {
+          quillRef.current.root.innerHTML = loadedContent;
+        }
         setFeatured(p.featured_image_url ?? "");
-        setMetaTitle(p.meta_title ?? ""); setMetaDesc(p.meta_description ?? "");
+        setMetaTitle(p.meta_title ?? "");
+        setMetaDesc(p.meta_description ?? "");
         setFaq(Array.isArray(p.faq) ? (p.faq as FAQ[]) : []);
         setPublished(!!p.published);
-      } catch (e: any) { toast.error(e.message); }
-      finally { setLoading(false); }
+      } catch (e: any) {
+        toast.error(e.message);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [props.mode, postId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || loading) return;
@@ -77,32 +100,47 @@ export function PostEditor(props: Props) {
       const Quill = (await import("quill")).default;
       if (!isMounted || !editorContainerRef.current) return;
       if (!quillRef.current) {
-        quillRef.current = new Quill(editorContainerRef.current, {
+        const q = new Quill(editorContainerRef.current, {
           theme: "snow",
           modules: {
             toolbar: [
-              [{ 'header': [1, 2, 3, false] }],
-              ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-              [{ 'align': [] }],
-              [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-              ['link', 'image'],
-              ['clean']
-            ]
-          }
+              [{ header: [1, 2, 3, false] }],
+              ["bold", "italic", "underline", "strike", "blockquote"],
+              [{ align: [] }],
+              [{ list: "ordered" }, { list: "bullet" }],
+              ["link", "image"],
+              ["clean"],
+            ],
+          },
         });
-        quillRef.current.on("text-change", () => {
-          setContent(quillRef.current.root.innerHTML);
+
+        if (contentRef.current && q.root.innerHTML !== contentRef.current) {
+          q.root.innerHTML = contentRef.current;
+        }
+
+        q.on("text-change", () => {
+          const html = q.root.innerHTML;
+          contentRef.current = html;
+          setContent(html);
         });
+
+        quillRef.current = q;
+      } else {
+        if (contentRef.current && quillRef.current.root.innerHTML !== contentRef.current) {
+          quillRef.current.root.innerHTML = contentRef.current;
+        }
       }
     })();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [loading]);
 
   useEffect(() => {
     if (quillRef.current && content !== quillRef.current.root.innerHTML) {
       quillRef.current.root.innerHTML = content;
     }
-  }, [content, loading]);
+  }, [content]);
 
   const onTitle = (v: string) => {
     setTitle(v);

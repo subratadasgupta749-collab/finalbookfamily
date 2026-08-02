@@ -4,6 +4,7 @@ import { put, del } from "@vercel/blob";
 
 export const uploadBlobFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
+  .validator((d: FormData) => d)
   .handler(async ({ data }: { data: FormData }) => {
     const file = data.get("file") as File | null;
     const prefix = (data.get("prefix") as string) || "uploads";
@@ -20,6 +21,7 @@ export const uploadBlobFn = createServerFn({ method: "POST" })
 
 export const deleteBlobFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
+  .validator((d: { url: string }) => d)
   .handler(async ({ data }: { data: { url: string } }) => {
     if (!data.url) throw new Error("No URL provided");
     

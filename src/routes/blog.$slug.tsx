@@ -248,7 +248,7 @@ function InlineAlsoRead({ post }: { post: AlsoReadItem }) {
 }
 
 
-const AUTHOR_SOCIAL_ICONS: Record<string, { Icon: typeof Facebook; label: string }> = {
+const AUTHOR_SOCIAL_ICONS: Record<string, { Icon: React.ComponentType<any>; label: string }> = {
   website: { Icon: Globe, label: "Website" },
   facebook: { Icon: Facebook, label: "Facebook" },
   instagram: { Icon: Instagram, label: "Instagram" },

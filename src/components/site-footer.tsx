@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
 
-const SOCIAL_ICONS: Record<string, { Icon: typeof Facebook; label: string }> = {
+const SOCIAL_ICONS: Record<string, { Icon: React.ComponentType<any>; label: string }> = {
   facebook: { Icon: Facebook, label: "Facebook" },
   instagram: { Icon: Instagram, label: "Instagram" },
   youtube: { Icon: Youtube, label: "YouTube" },
