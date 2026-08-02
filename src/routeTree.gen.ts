@@ -14,6 +14,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RefundRouteImport } from './routes/refund'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as DmcaRouteImport } from './routes/dmca'
 import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -49,6 +50,7 @@ import { Route as AuthenticatedAdminAdminReferralsRouteImport } from './routes/_
 import { Route as AuthenticatedAdminAdminPaymentGatewaysRouteImport } from './routes/_authenticated/_admin/admin.payment-gateways'
 import { Route as AuthenticatedAdminAdminOrdersRouteImport } from './routes/_authenticated/_admin/admin.orders'
 import { Route as AuthenticatedAdminAdminMessagesRouteImport } from './routes/_authenticated/_admin/admin.messages'
+import { Route as AuthenticatedAdminAdminLegalRouteImport } from './routes/_authenticated/_admin/admin.legal'
 import { Route as AuthenticatedAdminAdminEmailTemplatesRouteImport } from './routes/_authenticated/_admin/admin.email-templates'
 import { Route as AuthenticatedAdminAdminEmailLogsRouteImport } from './routes/_authenticated/_admin/admin.email-logs'
 import { Route as AuthenticatedAdminAdminCouponsRouteImport } from './routes/_authenticated/_admin/admin.coupons'
@@ -98,6 +100,11 @@ const RefundRoute = RefundRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DmcaRoute = DmcaRouteImport.update({
+  id: '/dmca',
+  path: '/dmca',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DisclaimerRoute = DisclaimerRouteImport.update({
@@ -292,6 +299,12 @@ const AuthenticatedAdminAdminMessagesRoute =
     path: '/admin/messages',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminLegalRoute =
+  AuthenticatedAdminAdminLegalRouteImport.update({
+    id: '/admin/legal',
+    path: '/admin/legal',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminEmailTemplatesRoute =
   AuthenticatedAdminAdminEmailTemplatesRouteImport.update({
     id: '/admin/email-templates',
@@ -450,6 +463,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/privacy': typeof PrivacyRoute
   '/refund': typeof RefundRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -484,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
   '/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
+  '/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
   '/admin/messages': typeof AuthenticatedAdminAdminMessagesRoute
   '/admin/orders': typeof AuthenticatedAdminAdminOrdersRoute
   '/admin/payment-gateways': typeof AuthenticatedAdminAdminPaymentGatewaysRoute
@@ -514,6 +529,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/privacy': typeof PrivacyRoute
   '/refund': typeof RefundRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -548,6 +564,7 @@ export interface FileRoutesByTo {
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
   '/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
+  '/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
   '/admin/messages': typeof AuthenticatedAdminAdminMessagesRoute
   '/admin/orders': typeof AuthenticatedAdminAdminOrdersRoute
   '/admin/payment-gateways': typeof AuthenticatedAdminAdminPaymentGatewaysRoute
@@ -580,6 +597,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/privacy': typeof PrivacyRoute
   '/refund': typeof RefundRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -616,6 +634,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
   '/_authenticated/_admin/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/_authenticated/_admin/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
+  '/_authenticated/_admin/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
   '/_authenticated/_admin/admin/messages': typeof AuthenticatedAdminAdminMessagesRoute
   '/_authenticated/_admin/admin/orders': typeof AuthenticatedAdminAdminOrdersRoute
   '/_authenticated/_admin/admin/payment-gateways': typeof AuthenticatedAdminAdminPaymentGatewaysRoute
@@ -648,6 +667,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/disclaimer'
+    | '/dmca'
     | '/privacy'
     | '/refund'
     | '/reset-password'
@@ -682,6 +702,7 @@ export interface FileRouteTypes {
     | '/admin/coupons'
     | '/admin/email-logs'
     | '/admin/email-templates'
+    | '/admin/legal'
     | '/admin/messages'
     | '/admin/orders'
     | '/admin/payment-gateways'
@@ -712,6 +733,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/disclaimer'
+    | '/dmca'
     | '/privacy'
     | '/refund'
     | '/reset-password'
@@ -746,6 +768,7 @@ export interface FileRouteTypes {
     | '/admin/coupons'
     | '/admin/email-logs'
     | '/admin/email-templates'
+    | '/admin/legal'
     | '/admin/messages'
     | '/admin/orders'
     | '/admin/payment-gateways'
@@ -777,6 +800,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/disclaimer'
+    | '/dmca'
     | '/privacy'
     | '/refund'
     | '/reset-password'
@@ -813,6 +837,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/coupons'
     | '/_authenticated/_admin/admin/email-logs'
     | '/_authenticated/_admin/admin/email-templates'
+    | '/_authenticated/_admin/admin/legal'
     | '/_authenticated/_admin/admin/messages'
     | '/_authenticated/_admin/admin/orders'
     | '/_authenticated/_admin/admin/payment-gateways'
@@ -845,6 +870,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   CookiesRoute: typeof CookiesRoute
   DisclaimerRoute: typeof DisclaimerRoute
+  DmcaRoute: typeof DmcaRoute
   PrivacyRoute: typeof PrivacyRoute
   RefundRoute: typeof RefundRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -892,6 +918,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dmca': {
+      id: '/dmca'
+      path: '/dmca'
+      fullPath: '/dmca'
+      preLoaderRoute: typeof DmcaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/disclaimer': {
@@ -1139,6 +1172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminMessagesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/legal': {
+      id: '/_authenticated/_admin/admin/legal'
+      path: '/admin/legal'
+      fullPath: '/admin/legal'
+      preLoaderRoute: typeof AuthenticatedAdminAdminLegalRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/email-templates': {
       id: '/_authenticated/_admin/admin/email-templates'
       path: '/admin/email-templates'
@@ -1335,6 +1375,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminCouponsRoute: typeof AuthenticatedAdminAdminCouponsRoute
   AuthenticatedAdminAdminEmailLogsRoute: typeof AuthenticatedAdminAdminEmailLogsRoute
   AuthenticatedAdminAdminEmailTemplatesRoute: typeof AuthenticatedAdminAdminEmailTemplatesRoute
+  AuthenticatedAdminAdminLegalRoute: typeof AuthenticatedAdminAdminLegalRoute
   AuthenticatedAdminAdminMessagesRoute: typeof AuthenticatedAdminAdminMessagesRoute
   AuthenticatedAdminAdminOrdersRoute: typeof AuthenticatedAdminAdminOrdersRoute
   AuthenticatedAdminAdminPaymentGatewaysRoute: typeof AuthenticatedAdminAdminPaymentGatewaysRoute
@@ -1369,6 +1410,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminEmailLogsRoute: AuthenticatedAdminAdminEmailLogsRoute,
   AuthenticatedAdminAdminEmailTemplatesRoute:
     AuthenticatedAdminAdminEmailTemplatesRoute,
+  AuthenticatedAdminAdminLegalRoute: AuthenticatedAdminAdminLegalRoute,
   AuthenticatedAdminAdminMessagesRoute: AuthenticatedAdminAdminMessagesRoute,
   AuthenticatedAdminAdminOrdersRoute: AuthenticatedAdminAdminOrdersRoute,
   AuthenticatedAdminAdminPaymentGatewaysRoute:
@@ -1470,6 +1512,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   CookiesRoute: CookiesRoute,
   DisclaimerRoute: DisclaimerRoute,
+  DmcaRoute: DmcaRoute,
   PrivacyRoute: PrivacyRoute,
   RefundRoute: RefundRoute,
   ResetPasswordRoute: ResetPasswordRoute,
