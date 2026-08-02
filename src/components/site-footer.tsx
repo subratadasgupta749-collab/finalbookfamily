@@ -53,31 +53,17 @@ type FooterLink = { label: string; href: string };
 
 const DEFAULT_MENUS: { title: string; links: FooterLink[] }[] = [
   {
-    title: "Product",
+    title: "Quick Links",
     links: [
-      { label: "How it works", href: "/#how" },
-      { label: "Books", href: "/#books" },
-      { label: "Preview", href: "/#preview" },
-      { label: "Pricing", href: "/#pricing" },
-      { label: "FAQ", href: "/#faq" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { label: "Blog", href: "/blog" },
-      { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
+      { label: "Home", href: "/" },
+      { label: "About Us", href: "/about" },
+      { label: "Contact Us", href: "/contact" },
       { label: "Privacy Policy", href: "/privacy" },
-      { label: "Terms of Service", href: "/terms" },
+      { label: "Terms & Conditions", href: "/terms" },
       { label: "Refund Policy", href: "/refund" },
       { label: "Cookie Policy", href: "/cookies" },
       { label: "Disclaimer", href: "/disclaimer" },
+      { label: "DMCA Policy", href: "/dmca" },
     ],
   },
 ];
@@ -154,7 +140,7 @@ export function SiteFooter() {
       className="mt-auto bg-[color:var(--ft-bg)] text-[color:var(--ft-text)]"
     >
       <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-16">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1.4fr] lg:gap-8">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1.2fr_1.4fr] lg:gap-12">
           {/* Brand */}
           <div>
             <Link
@@ -202,10 +188,14 @@ export function SiteFooter() {
                       <a href={l.href} target="_blank" rel="noopener noreferrer" className={linkCls}>
                         {l.label}
                       </a>
-                    ) : (
+                    ) : l.href.startsWith("/#") ? (
                       <a href={l.href} className={linkCls}>
                         {l.label}
                       </a>
+                    ) : (
+                      <Link to={l.href} className={linkCls}>
+                        {l.label}
+                      </Link>
                     )}
                   </li>
                 ))}
