@@ -273,13 +273,15 @@ function AdminBookThemesPage() {
     }
   };
 
-  if (isLoading || !themes) {
+  if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
         <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary" /> Loading book themes…
       </div>
     );
   }
+
+  const themeList = themes ?? [];
 
   return (
     <div className="space-y-6">
@@ -296,9 +298,9 @@ function AdminBookThemesPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {themes.map((t, idx) => {
+        {themeList.map((t, idx) => {
           const isFirst = idx === 0;
-          const isLast = idx === themes.length - 1;
+          const isLast = idx === themeList.length - 1;
           const previewTpl = getTemplate(t);
 
           return (

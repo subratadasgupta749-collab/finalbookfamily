@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { BOOK_TEMPLATES, BookTemplate } from "./book-templates";
 
 export type DbBookTheme = {
   id: string;
@@ -42,6 +43,48 @@ export type DbBookTheme = {
   updated_at: string;
   preview_images?: Array<{ id: string; image_url: string; caption: string | null; display_order: number }>;
 };
+
+export function templateToDbTheme(t: BookTemplate, order: number): DbBookTheme {
+  return {
+    id: `builtin-${t.id}`,
+    slug: t.id,
+    name: t.label,
+    description: t.description || null,
+    is_enabled: true,
+    is_default: t.id === "classic",
+    display_order: order,
+    cover_design: t.cover,
+    typography_name: t.typographyName || null,
+    fonts: {
+      display: t.fonts.display,
+      body: t.fonts.body,
+      script: t.fonts.script || t.fonts.display,
+    },
+    color_palette: t.palette,
+    background_style: t.background,
+    background_name: t.backgroundName,
+    header_style: "standard",
+    footer_style: "standard",
+    chapter_style: t.opener,
+    timeline_style: t.timeline,
+    photo_layout: t.photo,
+    quote_style: t.quote,
+    divider_style: t.divider,
+    page_number_style: "bottom-center",
+    toc_style: "classic",
+    cover_layout: "standard",
+    back_cover_layout: "standard",
+    print_settings: { pageSize: "trade", margins: "standard", bleedMm: 3 },
+    cover_image_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    preview_images: [],
+  };
+}
+
+export const FALLBACK_THEMES: DbBookTheme[] = BOOK_TEMPLATES.map((t, idx) =>
+  templateToDbTheme(t, idx + 1),
+);
 
 const themeInputSchema = z.object({
   slug: z.string().min(2).max(50),
@@ -89,20 +132,23 @@ const themeInputSchema = z.object({
  */
 export const getAvailableThemes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const supabase = context.supabase as any;
-    const { data: themes, error } = await supabase
-      .from("book_themes")
-      .select("*, theme_preview_images(id, image_url, caption, display_order)")
-      .eq("is_enabled", true)
-      .order("display_order", { ascending: true })
-      .order("created_at", { ascending: true });
+  .handler(async () => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: themes, error } = await supabaseAdmin
+        .from("book_themes")
+        .select("*, theme_preview_images(id, image_url, caption, display_order)")
+        .eq("is_enabled", true)
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true });
 
-    if (error) {
-      console.error("Error fetching book themes:", error);
-      return [];
+      if (error || !themes || themes.length === 0) {
+        return FALLBACK_THEMES.filter((t) => t.is_enabled);
+      }
+      return themes as DbBookTheme[];
+    } catch {
+      return FALLBACK_THEMES.filter((t) => t.is_enabled);
     }
-    return (themes ?? []) as DbBookTheme[];
   });
 
 /**
@@ -110,26 +156,29 @@ export const getAvailableThemes = createServerFn({ method: "GET" })
  */
 export const getDefaultTheme = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const supabase = context.supabase as any;
-    const { data, error } = await supabase
-      .from("book_themes")
-      .select("*, theme_preview_images(id, image_url, caption, display_order)")
-      .eq("is_default", true)
-      .maybeSingle();
-
-    if (error || !data) {
-      // Fallback to first enabled theme
-      const { data: fallback } = await supabase
+  .handler(async () => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data, error } = await supabaseAdmin
         .from("book_themes")
         .select("*, theme_preview_images(id, image_url, caption, display_order)")
-        .eq("is_enabled", true)
-        .order("display_order", { ascending: true })
-        .limit(1)
+        .eq("is_default", true)
         .maybeSingle();
-      return fallback as DbBookTheme | null;
+
+      if (error || !data) {
+        const { data: fallback } = await supabaseAdmin
+          .from("book_themes")
+          .select("*, theme_preview_images(id, image_url, caption, display_order)")
+          .eq("is_enabled", true)
+          .order("display_order", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        return (fallback as DbBookTheme) || FALLBACK_THEMES[0];
+      }
+      return data as DbBookTheme;
+    } catch {
+      return FALLBACK_THEMES[0];
     }
-    return data as DbBookTheme;
   });
 
 /**
@@ -137,16 +186,22 @@ export const getDefaultTheme = createServerFn({ method: "GET" })
  */
 export const adminListThemes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const supabase = context.supabase as any;
-    const { data: themes, error } = await supabase
-      .from("book_themes")
-      .select("*, theme_preview_images(id, image_url, caption, display_order)")
-      .order("display_order", { ascending: true })
-      .order("created_at", { ascending: true });
+  .handler(async () => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: themes, error } = await supabaseAdmin
+        .from("book_themes")
+        .select("*, theme_preview_images(id, image_url, caption, display_order)")
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true });
 
-    if (error) throw new Error(error.message);
-    return (themes ?? []) as DbBookTheme[];
+      if (error || !themes || themes.length === 0) {
+        return FALLBACK_THEMES;
+      }
+      return themes as DbBookTheme[];
+    } catch {
+      return FALLBACK_THEMES;
+    }
   });
 
 /**
