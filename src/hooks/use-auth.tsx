@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setRoles([]);
       }
+      setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
