@@ -17,11 +17,18 @@ import {
   updateChapter,
   updateManuscriptText,
 } from "@/lib/manuscript.functions";
+import { getAvailableThemes } from "@/lib/themes.functions";
 
 const manuscriptQueryOptions = (bookId: string) =>
   queryOptions({
     queryKey: ["manuscript", bookId],
     queryFn: () => getManuscript({ data: { bookId } }),
+  });
+
+const themesQueryOptions = () =>
+  queryOptions({
+    queryKey: ["available-themes"],
+    queryFn: () => getAvailableThemes(),
   });
 
 export const Route = createFileRoute("/_authenticated/_app/books/$bookId/manuscript")({
@@ -48,9 +55,17 @@ function ManuscriptPage() {
   const { bookId } = Route.useParams();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery(manuscriptQueryOptions(bookId));
+  const { data: dbThemes } = useQuery(themesQueryOptions());
 
   const generateFn = useServerFn(generateBook);
   const setThemeFn = useServerFn(setTheme);
+
+  const themeList = useMemo(() => {
+    if (dbThemes && dbThemes.length > 0) {
+      return dbThemes.map((t) => ({ id: t.slug, label: t.name, description: t.description }));
+    }
+    return BOOK_THEMES;
+  }, [dbThemes]);
 
   const generateMutation = useMutation({
     mutationFn: () => generateFn({ data: { bookId } }),
@@ -107,7 +122,7 @@ function ManuscriptPage() {
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Book theme</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {BOOK_THEMES.map((t) => {
+          {themeList.map((t) => {
             const active = t.id === theme;
             return (
               <button

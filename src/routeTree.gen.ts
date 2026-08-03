@@ -58,6 +58,7 @@ import { Route as AuthenticatedAdminAdminEmailLogsRouteImport } from './routes/_
 import { Route as AuthenticatedAdminAdminCouponsRouteImport } from './routes/_authenticated/_admin/admin.coupons'
 import { Route as AuthenticatedAdminAdminCacheRouteImport } from './routes/_authenticated/_admin/admin.cache'
 import { Route as AuthenticatedAdminAdminBooksRouteImport } from './routes/_authenticated/_admin/admin.books'
+import { Route as AuthenticatedAdminAdminBookThemesRouteImport } from './routes/_authenticated/_admin/admin.book-themes'
 import { Route as AuthenticatedAdminAdminAnalyticsRouteImport } from './routes/_authenticated/_admin/admin.analytics'
 import { Route as AuthenticatedAdminAdminAiRoutingRouteImport } from './routes/_authenticated/_admin/admin.ai-routing'
 import { Route as AuthenticatedAdminAdminAiProvidersRouteImport } from './routes/_authenticated/_admin/admin.ai-providers'
@@ -347,6 +348,12 @@ const AuthenticatedAdminAdminBooksRoute =
     path: '/admin/books',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminBookThemesRoute =
+  AuthenticatedAdminAdminBookThemesRouteImport.update({
+    id: '/admin/book-themes',
+    path: '/admin/book-themes',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminAnalyticsRoute =
   AuthenticatedAdminAdminAnalyticsRouteImport.update({
     id: '/admin/analytics',
@@ -507,6 +514,7 @@ export interface FileRoutesByFullPath {
   '/admin/ai-providers': typeof AuthenticatedAdminAdminAiProvidersRoute
   '/admin/ai-routing': typeof AuthenticatedAdminAdminAiRoutingRoute
   '/admin/analytics': typeof AuthenticatedAdminAdminAnalyticsRoute
+  '/admin/book-themes': typeof AuthenticatedAdminAdminBookThemesRoute
   '/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
@@ -575,6 +583,7 @@ export interface FileRoutesByTo {
   '/admin/ai-providers': typeof AuthenticatedAdminAdminAiProvidersRoute
   '/admin/ai-routing': typeof AuthenticatedAdminAdminAiRoutingRoute
   '/admin/analytics': typeof AuthenticatedAdminAdminAnalyticsRoute
+  '/admin/book-themes': typeof AuthenticatedAdminAdminBookThemesRoute
   '/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
@@ -647,6 +656,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/ai-providers': typeof AuthenticatedAdminAdminAiProvidersRoute
   '/_authenticated/_admin/admin/ai-routing': typeof AuthenticatedAdminAdminAiRoutingRoute
   '/_authenticated/_admin/admin/analytics': typeof AuthenticatedAdminAdminAnalyticsRoute
+  '/_authenticated/_admin/admin/book-themes': typeof AuthenticatedAdminAdminBookThemesRoute
   '/_authenticated/_admin/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/_authenticated/_admin/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/_authenticated/_admin/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
@@ -717,6 +727,7 @@ export interface FileRouteTypes {
     | '/admin/ai-providers'
     | '/admin/ai-routing'
     | '/admin/analytics'
+    | '/admin/book-themes'
     | '/admin/books'
     | '/admin/cache'
     | '/admin/coupons'
@@ -785,6 +796,7 @@ export interface FileRouteTypes {
     | '/admin/ai-providers'
     | '/admin/ai-routing'
     | '/admin/analytics'
+    | '/admin/book-themes'
     | '/admin/books'
     | '/admin/cache'
     | '/admin/coupons'
@@ -856,6 +868,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/ai-providers'
     | '/_authenticated/_admin/admin/ai-routing'
     | '/_authenticated/_admin/admin/analytics'
+    | '/_authenticated/_admin/admin/book-themes'
     | '/_authenticated/_admin/admin/books'
     | '/_authenticated/_admin/admin/cache'
     | '/_authenticated/_admin/admin/coupons'
@@ -1254,6 +1267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminBooksRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/book-themes': {
+      id: '/_authenticated/_admin/admin/book-themes'
+      path: '/admin/book-themes'
+      fullPath: '/admin/book-themes'
+      preLoaderRoute: typeof AuthenticatedAdminAdminBookThemesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/analytics': {
       id: '/_authenticated/_admin/admin/analytics'
       path: '/admin/analytics'
@@ -1410,6 +1430,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAiProvidersRoute: typeof AuthenticatedAdminAdminAiProvidersRoute
   AuthenticatedAdminAdminAiRoutingRoute: typeof AuthenticatedAdminAdminAiRoutingRoute
   AuthenticatedAdminAdminAnalyticsRoute: typeof AuthenticatedAdminAdminAnalyticsRoute
+  AuthenticatedAdminAdminBookThemesRoute: typeof AuthenticatedAdminAdminBookThemesRoute
   AuthenticatedAdminAdminBooksRoute: typeof AuthenticatedAdminAdminBooksRoute
   AuthenticatedAdminAdminCacheRoute: typeof AuthenticatedAdminAdminCacheRoute
   AuthenticatedAdminAdminCouponsRoute: typeof AuthenticatedAdminAdminCouponsRoute
@@ -1444,6 +1465,8 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
     AuthenticatedAdminAdminAiProvidersRoute,
   AuthenticatedAdminAdminAiRoutingRoute: AuthenticatedAdminAdminAiRoutingRoute,
   AuthenticatedAdminAdminAnalyticsRoute: AuthenticatedAdminAdminAnalyticsRoute,
+  AuthenticatedAdminAdminBookThemesRoute:
+    AuthenticatedAdminAdminBookThemesRoute,
   AuthenticatedAdminAdminBooksRoute: AuthenticatedAdminAdminBooksRoute,
   AuthenticatedAdminAdminCacheRoute: AuthenticatedAdminAdminCacheRoute,
   AuthenticatedAdminAdminCouponsRoute: AuthenticatedAdminAdminCouponsRoute,

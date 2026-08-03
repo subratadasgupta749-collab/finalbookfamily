@@ -138,6 +138,50 @@ function CategoryEditor({
   const grid = "grid gap-4 md:grid-cols-2";
 
   switch (category) {
+    case "interview":
+      return (
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field
+              label="Questions Per Step *"
+              hint="Number of questions displayed on each interview screen (Default = 3)."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={value.questions_per_step ?? 3}
+                onChange={setNum("questions_per_step")}
+              />
+            </Field>
+            <Field
+              label="Minimum Questions Per Topic"
+              hint="Minimum questions required before completing a topic (Default = 3)."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={value.min_per_topic ?? 3}
+                onChange={setNum("min_per_topic")}
+              />
+            </Field>
+            <Field
+              label="Maximum Questions Per Topic"
+              hint="Maximum questions allowed per topic (Default = 3)."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                value={value.max_per_topic ?? 3}
+                onChange={setNum("max_per_topic")}
+              />
+            </Field>
+          </div>
+        </div>
+      );
+
     case "general":
       return (
         <div className="space-y-5">

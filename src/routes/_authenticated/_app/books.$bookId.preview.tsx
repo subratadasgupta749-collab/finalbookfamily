@@ -19,6 +19,7 @@ import { getManuscript, setTheme, type BookThemeId } from "@/lib/manuscript.func
 import { getBook } from "@/lib/books.functions";
 import { generateExport, listExports, deleteExport } from "@/lib/exports.functions";
 import { listPhotos, type PhotoCategory } from "@/lib/photos.functions";
+import { getAvailableThemes } from "@/lib/themes.functions";
 import { BookRender } from "@/components/book/book-render";
 import {
   BACKGROUND_OPTIONS,
@@ -29,6 +30,7 @@ import {
   PHOTO_LAYOUT_OPTIONS,
   QUOTE_OPTIONS,
   TIMELINE_OPTIONS,
+  dbThemeToTemplate,
   getTemplate,
   resolveDesign,
   type BookCustomisation,
@@ -43,6 +45,8 @@ const exportsQ = (id: string) =>
   queryOptions({ queryKey: ["exports", id], queryFn: () => listExports({ data: { bookId: id } }) });
 const photosQ = (id: string) =>
   queryOptions({ queryKey: ["photos", id], queryFn: () => listPhotos({ data: { bookId: id } }) });
+const availableThemesQ = () =>
+  queryOptions({ queryKey: ["available-themes"], queryFn: () => getAvailableThemes() });
 
 const TOPIC_TO_CATEGORY: Record<string, PhotoCategory> = {
   childhood: "baby",
@@ -103,9 +107,19 @@ function PreviewPage() {
   const manuscriptQuery = useQuery(manuscriptQ(bookId));
   const exportsQuery = useQuery(exportsQ(bookId));
   const photosQuery = useQuery(photosQ(bookId));
+  const themesQuery = useQuery(availableThemesQ());
+
+  const availableThemes = useMemo(() => {
+    if (themesQuery.data && themesQuery.data.length > 0) {
+      return themesQuery.data.map((t) => dbThemeToTemplate(t));
+    }
+    return BOOK_TEMPLATES;
+  }, [themesQuery.data]);
 
   const exportDesign = () => {
-    const tpl = getTemplate((manuscriptQuery.data?.manuscript?.theme ?? "classic") as string);
+    const activeThemeId = manuscriptQuery.data?.manuscript?.theme ?? "classic";
+    const foundTheme = themesQuery.data?.find((t) => t.slug === activeThemeId);
+    const tpl = foundTheme ? dbThemeToTemplate(foundTheme) : getTemplate(activeThemeId as string);
     const design = resolveDesign(tpl, custom);
     const pageSize = PAGE_SIZES[custom.pageSize as PageSizeId];
     return {
@@ -292,7 +306,7 @@ function PreviewPage() {
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {BOOK_TEMPLATES.map((tpl) => {
+              {availableThemes.map((tpl) => {
                 const active = tpl.id === themeId;
                 return (
                   <button

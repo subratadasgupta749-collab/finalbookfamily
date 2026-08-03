@@ -15,12 +15,16 @@ import {
   PlayCircle,
   Sparkles,
   Save,
+  Clock,
+  AlertCircle,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useSpeechToText } from "@/hooks/use-speech-to-text";
 import {
   getInterviewState,
@@ -60,52 +64,60 @@ function InterviewPage() {
   const { data: state, isLoading } = useQuery(interviewQueryOptions(bookId));
 
   const [activeTopic, setActiveTopic] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [answerDraft, setAnswerDraft] = useState<string>("");
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [paused, setPaused] = useState(false);
   const [savingStatus, setSavingStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [interimText, setInterimText] = useState("");
+  const [activeSpeechQaId, setActiveSpeechQaId] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const speech = useSpeechToText({
-    onAppend: (finalChunk) => {
-      setAnswerDraft((prev) => {
-        const sep = prev && !/\s$/.test(prev) ? " " : "";
-        return prev + sep + finalChunk.trim();
-      });
-      setInterimText("");
-    },
-    onInterim: (t) => setInterimText(t),
-  });
+  const saveFn = useServerFn(saveAnswer);
+  const generateFn = useServerFn(generateNextQuestion);
+  const topicStatusFn = useServerFn(setTopicStatus);
 
-  // Initialize active topic once state loads
+  // Initialize active topic and current step from state / localStorage
   useEffect(() => {
     if (!state || activeTopic) return;
     const firstIncomplete = state.topics.find((t) => t.status !== "completed") ?? state.topics[0];
-    setActiveTopic(firstIncomplete.topic);
-    const lastIdx = Math.max(0, firstIncomplete.qa.length - 1);
-    setActiveIndex(lastIdx);
-  }, [state, activeTopic]);
+    const initialTopic = firstIncomplete.topic;
+    setActiveTopic(initialTopic);
+
+    // Restore step from localStorage if present
+    const savedStep = localStorage.getItem(`interview_step_${bookId}_${initialTopic}`);
+    if (savedStep) {
+      setCurrentStep(parseInt(savedStep, 10) || 0);
+    } else {
+      setCurrentStep(0);
+    }
+  }, [state, activeTopic, bookId]);
 
   const currentTopic: TopicState | undefined = useMemo(
     () => state?.topics.find((t) => t.topic === activeTopic),
     [state, activeTopic],
   );
 
-  const currentQA = currentTopic?.qa[activeIndex];
-
-  // Sync draft when moving to a different QA
-  const lastLoadedQaId = useRef<string | null>(null);
+  // Populate drafts when currentTopic changes or loads
   useEffect(() => {
-    if (currentQA && currentQA.id !== lastLoadedQaId.current) {
-      setAnswerDraft(currentQA.answer ?? "");
-      lastLoadedQaId.current = currentQA.id;
-      setSavingStatus("idle");
+    if (!currentTopic) return;
+    const map: Record<string, string> = {};
+    for (const q of currentTopic.qa) {
+      map[q.id] = q.answer ?? "";
     }
-  }, [currentQA]);
+    setDrafts(map);
+    setValidationError(null);
+  }, [currentTopic]);
 
-  const saveFn = useServerFn(saveAnswer);
-  const generateFn = useServerFn(generateNextQuestion);
-  const topicStatusFn = useServerFn(setTopicStatus);
+  // Speech-to-text hook
+  const speech = useSpeechToText({
+    onAppend: (finalChunk) => {
+      if (!activeSpeechQaId) return;
+      setDrafts((prev) => {
+        const cur = prev[activeSpeechQaId] || "";
+        const sep = cur && !/\s$/.test(cur) ? " " : "";
+        return { ...prev, [activeSpeechQaId]: cur + sep + finalChunk.trim() };
+      });
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: (vars: { qaId: string; answer: string }) =>
@@ -121,28 +133,29 @@ function InterviewPage() {
     },
   });
 
-  // Autosave (debounced) whenever the draft changes for the current QA
+  // Save modified answer drafts (debounced 800ms)
+  const previousDraftsRef = useRef<Record<string, string>>({});
   useEffect(() => {
-    if (!currentQA) return;
-    if (paused) return;
-    if (answerDraft === (currentQA.answer ?? "")) return;
-    const timeout = setTimeout(() => {
-      saveMutation.mutate({ qaId: currentQA.id, answer: answerDraft });
+    if (paused || !currentTopic) return;
+
+    const timeout = setTimeout(async () => {
+      for (const q of currentTopic.qa) {
+        const currentVal = drafts[q.id] ?? "";
+        const originalVal = q.answer ?? "";
+        if (currentVal !== originalVal && currentVal !== previousDraftsRef.current[q.id]) {
+          previousDraftsRef.current[q.id] = currentVal;
+          saveMutation.mutate({ qaId: q.id, answer: currentVal });
+        }
+      }
     }, 800);
+
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answerDraft, currentQA?.id, paused]);
+  }, [drafts, currentTopic, paused]);
 
   const generateMutation = useMutation({
     mutationFn: (topic: string) => generateFn({ data: { bookId, topic } }),
-    onSuccess: async (qa) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["interview", bookId] });
-      const fresh = queryClient.getQueryData<Awaited<ReturnType<typeof getInterviewState>>>([
-        "interview",
-        bookId,
-      ]);
-      const t = fresh?.topics.find((x) => x.topic === qa.topic);
-      if (t) setActiveIndex(t.qa.length - 1);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -157,16 +170,113 @@ function InterviewPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const flushSave = async () => {
-    if (!currentQA) return;
-    if (answerDraft !== (currentQA.answer ?? "")) {
-      await saveMutation.mutateAsync({ qaId: currentQA.id, answer: answerDraft });
+  const questionsPerStep = state?.questionsPerStep ?? 3;
+
+  const flushSaveCurrentStep = async () => {
+    if (!currentTopic) return;
+    const stepQas = currentTopic.qa.slice(
+      currentStep * questionsPerStep,
+      (currentStep + 1) * questionsPerStep,
+    );
+    for (const q of stepQas) {
+      const currentVal = drafts[q.id] ?? "";
+      if (currentVal !== (q.answer ?? "")) {
+        await saveMutation.mutateAsync({ qaId: q.id, answer: currentVal });
+      }
     }
   };
 
-  const handlePrev = async () => {
-    await flushSave();
-    if (activeIndex > 0) setActiveIndex(activeIndex - 1);
+  // Helper calculations for questions step pagination
+  const totalQuestionsInTopic = currentTopic?.qa.length || 0;
+  const totalStepsInTopic = Math.max(1, Math.ceil(totalQuestionsInTopic / questionsPerStep));
+  const currentStepQas = useMemo(() => {
+    if (!currentTopic) return [];
+    return currentTopic.qa.slice(
+      currentStep * questionsPerStep,
+      (currentStep + 1) * questionsPerStep,
+    );
+  }, [currentTopic, currentStep, questionsPerStep]);
+
+  // Calculate estimated remaining time (approx 2 mins per unanswered question)
+  const remainingUnansweredCount = useMemo(() => {
+    if (!state) return 0;
+    let count = 0;
+    for (const t of state.topics) {
+      count += Math.max(0, state.minPerTopic - t.answered);
+    }
+    return count;
+  }, [state]);
+
+  const estimatedMinutesLeft = Math.max(1, remainingUnansweredCount * 2);
+
+  // Switch Topic
+  const handleTopicSwitch = async (topic: string) => {
+    await flushSaveCurrentStep();
+    setActiveTopic(topic);
+    setValidationError(null);
+
+    const savedStep = localStorage.getItem(`interview_step_${bookId}_${topic}`);
+    if (savedStep) {
+      setCurrentStep(parseInt(savedStep, 10) || 0);
+    } else {
+      setCurrentStep(0);
+    }
+  };
+
+  // Step Navigation - Previous
+  const handlePrevStep = async () => {
+    await flushSaveCurrentStep();
+    setValidationError(null);
+    if (currentStep > 0) {
+      const nextStep = currentStep - 1;
+      setCurrentStep(nextStep);
+      localStorage.setItem(`interview_step_${bookId}_${activeTopic}`, nextStep.toString());
+    }
+  };
+
+  // Step Navigation - Next
+  const handleNextStep = async () => {
+    if (!currentTopic) return;
+    setValidationError(null);
+
+    // Validate that required questions in the current 3-question step have answers
+    const unansweredInStep = currentStepQas.filter((q) => {
+      const val = drafts[q.id] ?? "";
+      return !val || val.trim().length === 0;
+    });
+
+    if (unansweredInStep.length > 0) {
+      const msg = "Please complete all 3 questions on this step before proceeding.";
+      setValidationError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    await flushSaveCurrentStep();
+
+    // If there are more steps in this topic, advance step
+    if (currentStep < totalStepsInTopic - 1) {
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      localStorage.setItem(`interview_step_${bookId}_${activeTopic}`, nextStep.toString());
+      return;
+    }
+
+    // Need more questions generated or topic is ready to complete
+    if (currentTopic.qa.length < state!.maxPerTopic) {
+      generateMutation.mutate(currentTopic.topic);
+      return;
+    }
+
+    // Topic is complete -> mark topic complete and advance to next incomplete topic
+    if (currentTopic.can_complete && currentTopic.status !== "completed") {
+      await topicStatusMutation.mutateAsync({
+        topic: currentTopic.topic,
+        status: "completed",
+      });
+    }
+
+    await goToNextIncompleteTopic();
   };
 
   const goToNextIncompleteTopic = async () => {
@@ -177,6 +287,7 @@ function InterviewPage() {
     const next =
       after.find((t) => t.status !== "completed") ??
       before.find((t) => t.status !== "completed");
+
     if (next) {
       await handleTopicSwitch(next.topic);
       toast.success(`Moving on to "${next.topic}"`);
@@ -186,88 +297,74 @@ function InterviewPage() {
     }
   };
 
-  const handleNext = async () => {
-    if (!currentTopic) return;
-    await flushSave();
-    if (activeIndex < currentTopic.qa.length - 1) {
-      setActiveIndex(activeIndex + 1);
-      return;
-    }
-    if (currentTopic.qa.length >= state!.maxPerTopic) {
-      // Auto-complete this topic if eligible, then jump to next
-      if (currentTopic.can_complete && currentTopic.status !== "completed") {
-        await topicStatusMutation.mutateAsync({
-          topic: currentTopic.topic,
-          status: "completed",
-        });
-      }
-      await goToNextIncompleteTopic();
-      return;
-    }
-    generateMutation.mutate(currentTopic.topic);
+  const handleResumeLater = async () => {
+    await flushSaveCurrentStep();
+    toast.success("Progress saved! You can resume anytime.");
+    router.navigate({ to: "/books/$bookId", params: { bookId } });
   };
 
-  const handleTopicSwitch = async (topic: string) => {
-    await flushSave();
-    setActiveTopic(topic);
-    const t = state?.topics.find((x) => x.topic === topic);
-    setActiveIndex(t ? Math.max(0, t.qa.length - 1) : 0);
-  };
-
-  const allTopicsCompleted =
-    !!state && state.completedTopics === state.totalTopics;
+  const allTopicsCompleted = !!state && state.completedTopics === state.totalTopics;
 
   if (isLoading || !state) {
     return (
-      <div className="mx-auto max-w-4xl text-center text-muted-foreground">
+      <div className="mx-auto max-w-4xl py-12 text-center text-muted-foreground">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
         Loading interview…
       </div>
     );
   }
 
-  const overallProgress = Math.round(
-    (state.completedTopics / state.totalTopics) * 100,
-  );
+  const overallProgress = Math.round((state.completedTopics / state.totalTopics) * 100);
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <Link
-        to="/books/$bookId"
-        params={{ bookId }}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to book
-      </Link>
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
+        <Link
+          to="/books/$bookId"
+          params={{ bookId }}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to book details
+        </Link>
+        <Button variant="outline" size="sm" onClick={handleResumeLater}>
+          <Bookmark className="mr-1.5 h-4 w-4 text-primary" /> Save & Resume Later
+        </Button>
+      </div>
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+      {/* Main Title & Progress Panel */}
+      <div className="grid gap-4 md:grid-cols-[1fr_280px]">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">AI Interview</h1>
-          <p className="mt-1 text-muted-foreground">
-            Answer one question at a time. Every response is saved automatically.
+          <p className="mt-1 text-sm text-muted-foreground">
+            We present <strong>3 questions at a time</strong>. Your progress and answers autosave automatically.
           </p>
         </div>
-        <div className="min-w-[220px] rounded-2xl border border-border/60 bg-background p-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Overall progress</span>
-            <span className="text-muted-foreground">
-              {state.completedTopics}/{state.totalTopics}
-            </span>
+
+        {/* Global Progress Card */}
+        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-medium">
+            <span>Overall Progress</span>
+            <span className="text-primary font-semibold">{overallProgress}%</span>
           </div>
-          <Progress value={overallProgress} className="mt-2 h-1.5" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            {state.totalAnswered} answers saved
-          </p>
+          <Progress value={overallProgress} className="h-2" />
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" /> ~{estimatedMinutesLeft} mins left
+            </span>
+            <span>{state.totalAnswered} answered</span>
+          </div>
         </div>
       </div>
 
       {allTopicsCompleted && (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-5">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 h-6 w-6 text-primary" />
+            <CheckCircle2 className="mt-0.5 h-6 w-6 text-primary shrink-0" />
             <div>
               <p className="font-semibold">All interview topics completed 🎉</p>
               <p className="text-sm text-muted-foreground">
-                You're ready to turn these answers into a beautiful manuscript.
+                You are ready to turn these answers into a beautifully formatted hardcover manuscript.
               </p>
             </div>
           </div>
@@ -279,11 +376,12 @@ function InterviewPage() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Topic sidebar */}
-        <aside className="rounded-2xl border border-border/60 bg-background p-3">
-          <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Topics
+      {/* Main Layout: Topic Sidebar + 3-Question Interview Container */}
+      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+        {/* Sidebar Topics List */}
+        <aside className="rounded-2xl border border-border/60 bg-card p-3 h-fit space-y-1">
+          <h2 className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Interview Topics
           </h2>
           <ul className="space-y-1">
             {state.topics.map((t) => {
@@ -293,9 +391,9 @@ function InterviewPage() {
                 <li key={t.topic}>
                   <button
                     onClick={() => handleTopicSwitch(t.topic)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
                       active
-                        ? "bg-primary/10 text-primary font-medium"
+                        ? "bg-primary/10 text-primary font-semibold shadow-xs"
                         : "hover:bg-accent text-foreground"
                     }`}
                   >
@@ -315,166 +413,186 @@ function InterviewPage() {
           </ul>
         </aside>
 
-        {/* Interview panel */}
-        <section className="rounded-2xl border border-border/60 bg-background p-6 shadow-sm">
+        {/* 3-Questions Section */}
+        <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-6">
           {!currentTopic ? (
             <p className="text-muted-foreground">Select a topic to begin.</p>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-semibold">{currentTopic.topic}</h2>
-                  {currentTopic.status === "completed" && (
-                    <Badge>Completed</Badge>
-                  )}
-                  {currentTopic.status === "in_progress" && (
-                    <Badge variant="secondary">In progress</Badge>
-                  )}
+              {/* Header inside Panel */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold tracking-tight">{currentTopic.topic}</h2>
+                    {currentTopic.status === "completed" && <Badge>Completed</Badge>}
+                    {currentTopic.status === "in_progress" && (
+                      <Badge variant="secondary">In Progress</Badge>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Step <strong>{currentStep + 1}</strong> of <strong>{totalStepsInTopic}</strong>
+                    </span>
+                    <span>·</span>
+                    <span>
+                      Questions {currentStep * questionsPerStep + 1}–
+                      {Math.min(
+                        (currentStep + 1) * questionsPerStep,
+                        currentTopic.qa.length,
+                      )}{" "}
+                      of {currentTopic.qa.length}
+                    </span>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setPaused((p) => !p)}
-                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  {paused ? (
-                    <>
-                      <PlayCircle className="h-4 w-4" /> Resume
-                    </>
-                  ) : (
-                    <>
-                      <PauseCircle className="h-4 w-4" /> Pause
-                    </>
-                  )}
-                </button>
+
+                <div className="flex items-center gap-3">
+                  <SaveIndicator status={savingStatus} />
+                  <button
+                    onClick={() => setPaused((p) => !p)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {paused ? (
+                      <>
+                        <PlayCircle className="h-4 w-4" /> Resume
+                      </>
+                    ) : (
+                      <>
+                        <PauseCircle className="h-4 w-4" /> Pause
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                <span>
-                  Question {currentTopic.qa.length === 0 ? 0 : activeIndex + 1} of{" "}
-                  {currentTopic.qa.length}
-                </span>
-                <span>·</span>
-                <span>Min {state.minPerTopic} · Max {state.maxPerTopic}</span>
-                <SaveIndicator status={savingStatus} />
-              </div>
+              {/* Validation Warning Alert */}
+              {validationError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Validation Notice</AlertTitle>
+                  <AlertDescription>{validationError}</AlertDescription>
+                </Alert>
+              )}
 
               {paused ? (
-                <div className="mt-8 rounded-xl bg-muted/40 p-8 text-center">
-                  <PauseCircle className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-3 font-medium">Interview paused</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Your last answer is saved. Resume whenever you're ready.
+                <div className="rounded-xl bg-muted/40 p-8 text-center space-y-3">
+                  <PauseCircle className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <h3 className="font-semibold text-lg">Interview Paused</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Your answers are saved. Resume whenever you are ready.
                   </p>
-                  <Button className="mt-4" onClick={() => setPaused(false)}>
-                    <PlayCircle className="mr-2 h-4 w-4" /> Resume
+                  <Button onClick={() => setPaused(false)}>
+                    <PlayCircle className="mr-2 h-4 w-4" /> Resume Interview
                   </Button>
                 </div>
               ) : currentTopic.qa.length === 0 ? (
-                <div className="mt-8 rounded-xl border border-dashed border-border/70 p-8 text-center">
-                  <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                  <p className="mt-3 font-medium">Ready to begin "{currentTopic.topic}"?</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    We'll ask one question at a time.
+                <div className="rounded-xl border border-dashed border-border/80 p-8 text-center space-y-3">
+                  <Sparkles className="mx-auto h-10 w-10 text-primary" />
+                  <h3 className="font-semibold text-lg">Begin Topic: "{currentTopic.topic}"</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We will generate tailored interview questions {questionsPerStep} at a time.
                   </p>
                   <Button
-                    className="mt-4"
                     onClick={() => generateMutation.mutate(currentTopic.topic)}
                     disabled={generateMutation.isPending}
                   >
                     {generateMutation.isPending ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating Questions…
                       </>
                     ) : (
                       <>
-                        <Sparkles className="mr-2 h-4 w-4" /> Start topic
+                        <Sparkles className="mr-2 h-4 w-4" /> Start Topic
                       </>
                     )}
                   </Button>
                 </div>
-              ) : currentQA ? (
+              ) : (
                 <>
-                  <div className="mt-6 rounded-xl bg-muted/40 p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Sparkles className="h-4 w-4" />
-                      </div>
-                      <p className="text-base leading-relaxed">{currentQA.question}</p>
-                    </div>
-                  </div>
+                  {/* DISPLAY DYNAMIC BATCH OF QUESTIONS AT A TIME */}
+                  <div className="space-y-6">
+                    {currentStepQas.map((qa, indexOnStep) => {
+                      const absoluteIndex = currentStep * questionsPerStep + indexOnStep + 1;
+                      const isListeningThis = speech.listening && activeSpeechQaId === qa.id;
+                      const val = drafts[qa.id] ?? "";
+                      const isMissing = !val || val.trim().length === 0;
 
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between">
-                      <label htmlFor="answer" className="text-sm font-medium">
-                        Your answer
-                      </label>
-                      {speech.supported ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={speech.listening ? "default" : "outline"}
-                          onClick={speech.toggle}
-                          className={speech.listening ? "animate-pulse" : ""}
+                      return (
+                        <div
+                          key={qa.id}
+                          className={`rounded-2xl border p-5 transition-all space-y-3 ${
+                            validationError && isMissing
+                              ? "border-destructive/80 bg-destructive/5"
+                              : "border-border/60 bg-muted/20"
+                          }`}
                         >
-                          {speech.listening ? (
-                            <>
-                              <MicOff className="mr-1.5 h-4 w-4" /> Stop dictation
-                            </>
-                          ) : (
-                            <>
-                              <Mic className="mr-1.5 h-4 w-4" /> Speak your answer
-                            </>
-                          )}
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          Voice input not supported in this browser
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative mt-2">
-                      <Textarea
-                        id="answer"
-                        value={answerDraft + (interimText ? (answerDraft && !/\s$/.test(answerDraft) ? " " : "") + interimText : "")}
-                        onChange={(e) => {
-                          // When user types, drop any interim buffer to avoid conflict
-                          setInterimText("");
-                          setAnswerDraft(e.target.value);
-                        }}
-                        placeholder="Take your time. Share as much or as little as feels right… or tap the mic to speak."
-                        rows={8}
-                      />
-                      {speech.listening && (
-                        <span className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                          Listening…
-                        </span>
-                      )}
-                    </div>
-                    {speech.error && (
-                      <p className="mt-1 text-xs text-destructive">
-                        {speech.error === "not-allowed"
-                          ? "Microphone permission denied. Enable it in your browser settings."
-                          : `Voice error: ${speech.error}`}
-                      </p>
-                    )}
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {currentTopic.can_complete
-                        ? currentTopic.qa.length >= state.maxPerTopic
-                          ? `You've reached ${state.maxPerTopic} questions. Click "Next topic" to continue.`
-                          : `Great — you've answered enough for this topic. Add more with "Next question", or click "Mark topic complete" to move on.`
-                        : `Answer at least ${state.minPerTopic - currentTopic.answered} more question${
-                            state.minPerTopic - currentTopic.answered === 1 ? "" : "s"
-                          } to complete this topic. Click "Next question" when ready.`}
-                    </p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                                Q{absoluteIndex}
+                              </span>
+                              <p className="text-base font-medium leading-relaxed">{qa.question}</p>
+                            </div>
+
+                            {speech.supported && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={isListeningThis ? "default" : "outline"}
+                                onClick={() => {
+                                  if (isListeningThis) {
+                                    speech.stop();
+                                    setActiveSpeechQaId(null);
+                                  } else {
+                                    setActiveSpeechQaId(qa.id);
+                                    speech.start();
+                                  }
+                                }}
+                                className={isListeningThis ? "animate-pulse" : ""}
+                              >
+                                {isListeningThis ? (
+                                  <>
+                                    <MicOff className="mr-1 h-3.5 w-3.5" /> Stop
+                                  </>
+                                ) : (
+                                  <>
+                                    <Mic className="mr-1 h-3.5 w-3.5" /> Speak
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="relative">
+                            <Textarea
+                              value={val}
+                              onChange={(e) => {
+                                setValidationError(null);
+                                setDrafts((prev) => ({ ...prev, [qa.id]: e.target.value }));
+                              }}
+                              placeholder={`Answer Question ${absoluteIndex} in as much detail as you'd like…`}
+                              rows={4}
+                              className={validationError && isMissing ? "border-destructive" : ""}
+                            />
+                            {isListeningThis && (
+                              <span className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                                Listening…
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                  {/* Navigation Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
                     <Button
                       variant="outline"
-                      onClick={handlePrev}
-                      disabled={activeIndex === 0}
+                      onClick={handlePrevStep}
+                      disabled={currentStep === 0}
                     >
-                      <ChevronLeft className="mr-1 h-4 w-4" /> Previous
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Previous Step
                     </Button>
 
                     <div className="flex items-center gap-2">
@@ -482,7 +600,7 @@ function InterviewPage() {
                         <Button
                           variant="outline"
                           onClick={async () => {
-                            await flushSave();
+                            await flushSaveCurrentStep();
                             await topicStatusMutation.mutateAsync({
                               topic: currentTopic.topic,
                               status: "completed",
@@ -491,47 +609,33 @@ function InterviewPage() {
                           }}
                           disabled={topicStatusMutation.isPending}
                         >
-                          <CheckCircle2 className="mr-1 h-4 w-4" /> Mark topic complete
+                          <CheckCircle2 className="mr-1 h-4 w-4" /> Mark Topic Complete
                         </Button>
                       )}
-                      {currentTopic.status === "completed" && (
-                        <Button
-                          variant="ghost"
-                          onClick={() =>
-                            topicStatusMutation.mutate({
-                              topic: currentTopic.topic,
-                              status: "in_progress",
-                            })
-                          }
-                        >
-                          Reopen topic
-                        </Button>
-                      )}
-                      <Button
-                        onClick={handleNext}
-                        disabled={generateMutation.isPending}
-                      >
-                        {generateMutation.isPending &&
-                        activeIndex === currentTopic.qa.length - 1 ? (
+
+                      <Button onClick={handleNextStep} disabled={generateMutation.isPending}>
+                        {generateMutation.isPending ? (
                           <>
                             <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating…
                           </>
-                        ) : activeIndex < currentTopic.qa.length - 1 ? (
+                        ) : currentStep < totalStepsInTopic - 1 ? (
                           <>
-                            Next <ChevronRight className="ml-1 h-4 w-4" />
+                            Next Step <ChevronRight className="ml-1 h-4 w-4" />
                           </>
-                        ) : currentTopic.qa.length >= state.maxPerTopic ? (
-                          <>Next topic</>
+                        ) : currentTopic.qa.length < state.maxPerTopic ? (
+                          <>
+                            Next 3 Questions <Sparkles className="ml-1 h-4 w-4" />
+                          </>
                         ) : (
                           <>
-                            Next question <Sparkles className="ml-1 h-4 w-4" />
+                            Next Topic <ChevronRight className="ml-1 h-4 w-4" />
                           </>
                         )}
                       </Button>
                     </div>
                   </div>
                 </>
-              ) : null}
+              )}
             </>
           )}
         </section>
@@ -543,15 +647,15 @@ function InterviewPage() {
 function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" }) {
   if (status === "saving")
     return (
-      <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" /> Saving…
       </span>
     );
   if (status === "saved")
     return (
-      <span className="ml-auto inline-flex items-center gap-1 text-xs text-primary">
+      <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
         <Save className="h-3 w-3" /> Saved
       </span>
     );
-  return <span className="ml-auto" />;
+  return null;
 }

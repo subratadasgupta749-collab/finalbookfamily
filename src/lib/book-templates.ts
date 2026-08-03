@@ -516,8 +516,49 @@ export const TEMPLATES_BY_ID = Object.fromEntries(
   BOOK_TEMPLATES.map((t) => [t.id, t]),
 ) as Record<BookTemplateId, BookTemplate>;
 
-export function getTemplate(id?: string | null): BookTemplate {
-  return TEMPLATES_BY_ID[(id ?? "classic") as BookTemplateId] ?? TEMPLATES_BY_ID.classic;
+export function dbThemeToTemplate(theme: any): BookTemplate {
+  if (!theme) return TEMPLATES_BY_ID.classic;
+  // If it's already a BookTemplate
+  if (theme.fonts && theme.palette && theme.cover && theme.opener) {
+    return theme as BookTemplate;
+  }
+  return {
+    id: (theme.slug || theme.id || "classic") as BookTemplateId,
+    label: theme.name || theme.label || "Classic",
+    description: theme.description || "",
+    typographyName: theme.typography_name || "Custom Typography",
+    fonts: typeof theme.fonts === "object" ? theme.fonts : {
+      display: "'Playfair Display', Georgia, serif",
+      body: "'EB Garamond', Georgia, serif",
+      script: "'Cormorant Garamond', Georgia, serif",
+    },
+    palette: typeof theme.color_palette === "object" ? theme.color_palette : (theme.palette || TEMPLATES_BY_ID.classic.palette),
+    background: theme.background_style ?? theme.background ?? "none",
+    backgroundName: theme.background_name ?? "Plain white",
+    cover: (theme.cover_design ?? theme.cover ?? "plate") as CoverStyle,
+    opener: (theme.chapter_style ?? theme.opener ?? "numeral") as OpenerStyle,
+    dropCap: "serif",
+    divider: (theme.divider_style ?? theme.divider ?? "ornament") as DividerStyle,
+    quote: (theme.quote_style ?? theme.quote ?? "center") as QuoteStyle,
+    timeline: (theme.timeline_style ?? theme.timeline ?? "vertical") as TimelineStyle,
+    photo: (theme.photo_layout ?? theme.photo ?? "rounded") as PhotoLayout,
+    measure: "34rem",
+    bodySize: "1.0625rem",
+    bodyLeading: "1.85",
+    headingTracking: "-0.01em",
+    uppercaseLabels: true,
+  };
+}
+
+export function getTemplate(idOrTheme?: string | any | null): BookTemplate {
+  if (!idOrTheme) return TEMPLATES_BY_ID.classic;
+  if (typeof idOrTheme === "object") {
+    return dbThemeToTemplate(idOrTheme);
+  }
+  if (TEMPLATES_BY_ID[idOrTheme as BookTemplateId]) {
+    return TEMPLATES_BY_ID[idOrTheme as BookTemplateId];
+  }
+  return TEMPLATES_BY_ID.classic;
 }
 
 /* ---------------- Customisation ---------------- */

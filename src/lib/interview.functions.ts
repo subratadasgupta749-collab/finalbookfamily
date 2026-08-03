@@ -19,7 +19,25 @@ export const INTERVIEW_TOPICS = [
 export type InterviewTopic = (typeof INTERVIEW_TOPICS)[number];
 
 const MIN_Q = 3;
-const MAX_Q = 6;
+const MAX_Q = 3;
+
+async function getInterviewConfig(supabase: any) {
+  try {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "interview")
+      .maybeSingle();
+    const val = data?.value || {};
+    return {
+      questionsPerStep: Math.max(1, Number(val.questions_per_step) || 3),
+      minPerTopic: Math.max(1, Number(val.min_per_topic) || MIN_Q),
+      maxPerTopic: Math.max(1, Number(val.max_per_topic) || MAX_Q),
+    };
+  } catch {
+    return { questionsPerStep: 3, minPerTopic: MIN_Q, maxPerTopic: MAX_Q };
+  }
+}
 
 async function ensureBookAccess(supabase: any, bookId: string) {
   const { data, error } = await supabase
@@ -39,6 +57,7 @@ export const getInterviewState = createServerFn({ method: "GET" })
   )
   .handler(async ({ data, context }) => {
     const book = await ensureBookAccess(context.supabase, data.bookId);
+    const config = await getInterviewConfig(context.supabase);
 
     const { data: topicsRows, error: tErr } = await context.supabase
       .from("interview_topics")
@@ -68,14 +87,16 @@ export const getInterviewState = createServerFn({ method: "GET" })
       const qas = qaByTopic[topic] ?? [];
       const answered = qas.filter((q) => q.answer && q.answer.trim().length > 0).length;
       const state = topicMap.get(topic);
+      const totalSteps = Math.max(1, Math.ceil(qas.length / config.questionsPerStep));
       return {
         topic,
         status: state?.status ?? "not_started",
         completed_at: state?.completed_at ?? null,
         answered,
         total: qas.length,
-        can_complete: answered >= MIN_Q,
-        max_reached: qas.length >= MAX_Q,
+        totalSteps,
+        can_complete: answered >= config.minPerTopic,
+        max_reached: qas.length >= config.maxPerTopic,
         qa: qas,
       };
     });
@@ -89,8 +110,9 @@ export const getInterviewState = createServerFn({ method: "GET" })
       totalAnswered,
       completedTopics,
       totalTopics: INTERVIEW_TOPICS.length,
-      minPerTopic: MIN_Q,
-      maxPerTopic: MAX_Q,
+      questionsPerStep: config.questionsPerStep,
+      minPerTopic: config.minPerTopic,
+      maxPerTopic: config.maxPerTopic,
     };
   });
 
@@ -150,8 +172,9 @@ export const generateNextQuestion = createServerFn({ method: "POST" })
       .order("position");
     if (eErr) throw new Error(eErr.message);
 
-    if (existing.length >= MAX_Q) {
-      throw new Error(`Maximum ${MAX_Q} questions reached for this topic.`);
+    const config = await getInterviewConfig(context.supabase);
+    if (existing.length >= config.maxPerTopic) {
+      throw new Error(`Maximum ${config.maxPerTopic} questions reached for this topic.`);
     }
 
     // All prior questions across topics (avoid repeats globally)

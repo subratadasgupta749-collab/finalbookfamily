@@ -18,22 +18,7 @@ export const BOOK_THEMES = [
   { id: "storybook", label: "Storybook", description: "Watercolour washes and calligraphic titles." },
 ] as const;
 
-export type BookThemeId = (typeof BOOK_THEMES)[number]["id"];
-
-const themeEnum = z.enum([
-  "classic",
-  "vintage",
-  "modern",
-  "leather_journal",
-  "family_album",
-  "timeline_split",
-  "heritage",
-  "luxury_minimal",
-  "scrapbook",
-  "coffee_table",
-  "magazine",
-  "storybook",
-]);
+export type BookThemeId = string;
 
 async function ensureBookAccess(supabase: any, bookId: string) {
   const { data, error } = await supabase
@@ -73,18 +58,30 @@ export const getManuscript = createServerFn({ method: "GET" })
 
 export const setTheme = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { bookId: string; theme: BookThemeId }) =>
-    z.object({ bookId: z.string().uuid(), theme: themeEnum }).parse(data),
+  .inputValidator((data: { bookId: string; theme: string }) =>
+    z.object({ bookId: z.string().uuid(), theme: z.string().min(1) }).parse(data),
   )
   .handler(async ({ data, context }) => {
     await ensureBookAccess(context.supabase, data.bookId);
-    const { error } = await context.supabase
+    let { error } = await context.supabase
       .from("book_manuscripts")
       .upsert(
-        { book_id: data.bookId, user_id: context.userId, theme: data.theme },
+        { book_id: data.bookId, user_id: context.userId, theme: data.theme as any },
         { onConflict: "book_id" },
       );
-    if (error) throw new Error(error.message);
+
+    if (error && error.message.includes("invalid input value for enum")) {
+      // Graceful fallback if PostgreSQL theme column is still typed as enum prior to migration execution
+      const fallback = await context.supabase
+        .from("book_manuscripts")
+        .upsert(
+          { book_id: data.bookId, user_id: context.userId, theme: "classic" as any },
+          { onConflict: "book_id" },
+        );
+      if (fallback.error) throw new Error(fallback.error.message);
+    } else if (error) {
+      throw new Error(error.message);
+    }
     return { ok: true };
   });
 
