@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { subscribeNewsletter } from "@/lib/admin.functions";
 import {
   BookHeart,
   Facebook,
@@ -15,6 +18,8 @@ import {
   Mail,
   Phone,
   MapPin,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
 
@@ -205,28 +210,7 @@ export function SiteFooter() {
 
           {/* Contact + newsletter */}
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ft-text)]">
-              {newsletterTitle}
-            </h4>
-            <p className="mt-4 text-sm text-[color:var(--ft-link)]">{newsletterText}</p>
-            <form onSubmit={(e) => e.preventDefault()} className="mt-4 flex gap-2">
-              <label htmlFor="footer-newsletter" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="footer-newsletter"
-                type="email"
-                required
-                placeholder="you@family.com"
-                className="w-full rounded-full border border-[color:var(--ft-link)]/30 bg-white/10 px-4 py-2.5 text-sm text-[color:var(--ft-text)] outline-none placeholder:text-[color:var(--ft-link)]/60 focus:border-[color:var(--ft-hover)]"
-              />
-              <button
-                type="submit"
-                className="shrink-0 rounded-full bg-[color:var(--ft-hover)] px-4 py-2.5 text-sm font-medium text-[color:var(--ft-bg)] transition hover:opacity-90"
-              >
-                Join
-              </button>
-            </form>
+            <NewsletterSection title={newsletterTitle} text={newsletterText} />
 
             <ul className="mt-6 space-y-2.5 text-sm text-[color:var(--ft-link)]">
               {email && (
@@ -260,5 +244,69 @@ export function SiteFooter() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function NewsletterSection({ title, text }: { title: string; text: string }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await subscribeNewsletter({ data: { email: trimmed } });
+      toast.success("Thank you for subscribing to our newsletter!");
+      setSubmitted(true);
+      setEmail("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to subscribe. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ft-text)]">
+        {title}
+      </h4>
+      <p className="mt-4 text-sm text-[color:var(--ft-link)]">{text}</p>
+      {submitted ? (
+        <div className="mt-4 flex items-center gap-2 rounded-full border border-[color:var(--ft-hover)]/40 bg-[color:var(--ft-hover)]/10 px-4 py-2.5 text-sm font-medium text-[color:var(--ft-hover)]">
+          <Check className="h-4 w-4 shrink-0" />
+          <span>You're subscribed! Thank you for joining.</span>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
+          <label htmlFor="footer-newsletter" className="sr-only">
+            Email address
+          </label>
+          <input
+            id="footer-newsletter"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={busy}
+            placeholder="you@family.com"
+            className="w-full rounded-full border border-[color:var(--ft-link)]/30 bg-white/10 px-4 py-2.5 text-sm text-[color:var(--ft-text)] outline-none placeholder:text-[color:var(--ft-link)]/60 focus:border-[color:var(--ft-hover)] disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="shrink-0 flex items-center justify-center gap-2 rounded-full bg-[color:var(--ft-hover)] px-4 py-2.5 text-sm font-medium text-[color:var(--ft-bg)] transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Join"}
+          </button>
+        </form>
+      )}
+    </>
   );
 }

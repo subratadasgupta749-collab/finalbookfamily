@@ -293,6 +293,29 @@ export const submitContactMessage = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const subscribeNewsletter = createServerFn({ method: "POST" })
+  .inputValidator((d: { email: string }) =>
+    z.object({
+      email: z.string().trim().email("Enter a valid email address").max(255),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = (await import("@/integrations/supabase/client.server")).supabaseAdmin;
+    const { error } = await admin.from("contact_messages").insert({
+      name: "Newsletter Subscriber",
+      email: data.email,
+      message: "Subscribed to newsletter via website footer form.",
+    });
+    if (error) throw new Error(error.message);
+    const { notifyAdmin } = await import("./email.functions");
+    await notifyAdmin("admin_new_message", {
+      name: "Newsletter Subscriber",
+      email: data.email,
+      message: "Subscribed to newsletter via website footer form.",
+    }).catch(() => {});
+    return { ok: true };
+  });
+
 /* ---------------- Settings ---------------- */
 
 export const getSettings = createServerFn({ method: "GET" })
