@@ -803,7 +803,7 @@ function AdminBookThemesPage() {
 
                   {/* List preview images for this editing theme */}
                   <div className="grid grid-cols-3 gap-3 pt-2">
-                    {themes
+                    {themeList
                       .find((t) => t.id === editingId)
                       ?.preview_images?.map((img) => (
                         <div key={img.id} className="group relative overflow-hidden rounded-lg border">

@@ -135,7 +135,7 @@ export const getAvailableThemes = createServerFn({ method: "GET" })
   .handler(async () => {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: themes, error } = await supabaseAdmin
+      const { data: themes, error } = await (supabaseAdmin as any)
         .from("book_themes")
         .select("*, theme_preview_images(id, image_url, caption, display_order)")
         .eq("is_enabled", true)
@@ -159,14 +159,14 @@ export const getDefaultTheme = createServerFn({ method: "GET" })
   .handler(async () => {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await (supabaseAdmin as any)
         .from("book_themes")
         .select("*, theme_preview_images(id, image_url, caption, display_order)")
         .eq("is_default", true)
         .maybeSingle();
 
       if (error || !data) {
-        const { data: fallback } = await supabaseAdmin
+        const { data: fallback } = await (supabaseAdmin as any)
           .from("book_themes")
           .select("*, theme_preview_images(id, image_url, caption, display_order)")
           .eq("is_enabled", true)
@@ -189,7 +189,7 @@ export const adminListThemes = createServerFn({ method: "GET" })
   .handler(async () => {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: themes, error } = await supabaseAdmin
+      const { data: themes, error } = await (supabaseAdmin as any)
         .from("book_themes")
         .select("*, theme_preview_images(id, image_url, caption, display_order)")
         .order("display_order", { ascending: true })
