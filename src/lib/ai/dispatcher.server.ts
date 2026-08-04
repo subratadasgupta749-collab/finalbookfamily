@@ -386,6 +386,12 @@ async function callGemini(
         parsedError = errJson?.error?.message || errorText;
       } catch {}
 
+      if (res.status === 401 && isOAuthToken) {
+        parsedError = `${parsedError} — The token starting with 'AQ.' is an expired or invalid OAuth access token. Google AI Studio REST API requires a permanent API key. Please generate a permanent API key starting with 'AIzaSy...' at https://aistudio.google.com/app/apikey`;
+      } else if (res.status === 401) {
+        parsedError = `${parsedError} — Google AI Studio rejected this API key. Please verify your key at https://aistudio.google.com/app/apikey`;
+      }
+
       const auditLog = `[Google Gemini Audit Error]
 Provider: ${row.name} (${row.slug}) [Type: gemini]
 Base URL: ${base}
