@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient, queryOptions } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { format } from "date-fns";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -18,6 +19,8 @@ import {
   Clock,
   AlertCircle,
   Bookmark,
+  Check,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,7 +39,11 @@ import {
 const interviewQueryOptions = (bookId: string) =>
   queryOptions({
     queryKey: ["interview", bookId],
-    queryFn: () => getInterviewState({ data: { bookId } }),
+    queryFn: async () => {
+      console.log("[Interview] Database Read - Fetching interview state");
+      const res = await getInterviewState({ data: { bookId } });
+      return res;
+    },
   });
 
 export const Route = createFileRoute("/_authenticated/_app/books/$bookId/interview")({
@@ -55,11 +62,24 @@ export const Route = createFileRoute("/_authenticated/_app/books/$bookId/intervi
 });
 
 type TopicState = Awaited<ReturnType<typeof getInterviewState>>["topics"][number];
+type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 function InterviewPage() {
   const { bookId } = Route.useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  // Debug: Track component mounts, unmounts, and re-renders
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  console.log(`[Interview] Component Re-render #${renderCountRef.current}`);
+
+  useEffect(() => {
+    console.log("[Interview] Component Mount");
+    return () => {
+      console.log("[Interview] Component Unmount");
+    };
+  }, []);
 
   const { data: state, isLoading } = useQuery(interviewQueryOptions(bookId));
 
@@ -67,9 +87,14 @@ function InterviewPage() {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [paused, setPaused] = useState(false);
-  const [savingStatus, setSavingStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [savingStatus, setSavingStatus] = useState<SaveStatus>("idle");
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [activeSpeechQaId, setActiveSpeechQaId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // References to decouple server query refetches from active local state editing
+  const savedAnswersRef = useRef<Record<string, string>>({});
+  const activeTopicRef = useRef<string | null>(null);
 
   const saveFn = useServerFn(saveAnswer);
   const generateFn = useServerFn(generateNextQuestion);
@@ -96,61 +121,150 @@ function InterviewPage() {
     [state, activeTopic],
   );
 
-  // Populate drafts when currentTopic changes or loads
+  // Initialize local drafts ONLY when switching topic or on initial topic load
+  // Local state MUST NEVER be overwritten by server refetches while typing!
   useEffect(() => {
     if (!currentTopic) return;
-    const map: Record<string, string> = {};
-    for (const q of currentTopic.qa) {
-      map[q.id] = q.answer ?? "";
-    }
-    setDrafts(map);
+    const isTopicChanged = activeTopicRef.current !== currentTopic.topic;
+    activeTopicRef.current = currentTopic.topic;
+
+    setDrafts((prevDrafts) => {
+      const nextDrafts = { ...prevDrafts };
+      for (const q of currentTopic.qa) {
+        // Check for local backup in localStorage first (offline safety)
+        const backup = typeof window !== "undefined"
+          ? localStorage.getItem(`interview_draft_${bookId}_${q.id}`)
+          : null;
+
+        // Populate savedAnswersRef for change comparison
+        savedAnswersRef.current[q.id] = q.answer ?? "";
+
+        // If topic switched, or draft is not set yet, populate draft
+        if (isTopicChanged || nextDrafts[q.id] === undefined) {
+          nextDrafts[q.id] = backup ?? q.answer ?? "";
+        }
+      }
+      return nextDrafts;
+    });
+
     setValidationError(null);
-  }, [currentTopic]);
+  }, [currentTopic, bookId]);
 
   // Speech-to-text hook
   const speech = useSpeechToText({
     onAppend: (finalChunk) => {
       if (!activeSpeechQaId) return;
+      console.log(`[Interview] Speech input appended for ${activeSpeechQaId}`);
       setDrafts((prev) => {
         const cur = prev[activeSpeechQaId] || "";
         const sep = cur && !/\s$/.test(cur) ? " " : "";
-        return { ...prev, [activeSpeechQaId]: cur + sep + finalChunk.trim() };
+        const updated = cur + sep + finalChunk.trim();
+        try {
+          localStorage.setItem(`interview_draft_${bookId}_${activeSpeechQaId}`, updated);
+        } catch {}
+        return { ...prev, [activeSpeechQaId]: updated };
       });
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: (vars: { qaId: string; answer: string }) =>
-      saveFn({ data: { qaId: vars.qaId, bookId, answer: vars.answer } }),
-    onMutate: () => setSavingStatus("saving"),
-    onSuccess: () => {
-      setSavingStatus("saved");
-      queryClient.invalidateQueries({ queryKey: ["interview", bookId] });
-    },
-    onError: (e: Error) => {
-      setSavingStatus("idle");
-      toast.error(e.message);
-    },
-  });
+  // Handle Textarea Change (Controlled Local State update)
+  const handleTextareaChange = useCallback(
+    (qaId: string, newValue: string) => {
+      console.log(`[Interview] Input Changed for ${qaId}: length ${newValue.length}`);
+      setDrafts((prev) => {
+        console.log(`[Interview] Local State Updated for ${qaId}`);
+        return { ...prev, [qaId]: newValue };
+      });
 
-  // Save modified answer drafts (debounced 800ms)
-  const previousDraftsRef = useRef<Record<string, string>>({});
+      // Save offline backup to localStorage immediately
+      try {
+        localStorage.setItem(`interview_draft_${bookId}_${qaId}`, newValue);
+      } catch {}
+
+      setValidationError(null);
+    },
+    [bookId],
+  );
+
+  // Core Auto-Save Engine (Debounced 2.5 seconds after user stops typing)
+  const isSavingRef = useRef(false);
+
+  const performSave = useCallback(
+    async (qaId: string, answer: string) => {
+      if (isSavingRef.current) return;
+      console.log(`[Interview] Auto Save Started for ${qaId}`);
+      setSavingStatus("saving");
+      isSavingRef.current = true;
+
+      try {
+        await saveFn({ data: { qaId, bookId, answer } });
+        savedAnswersRef.current[qaId] = answer;
+
+        // Clear local backup once successfully persisted to database
+        try {
+          localStorage.removeItem(`interview_draft_${bookId}_${qaId}`);
+        } catch {}
+
+        // Optimistically update TanStack Query cache in memory WITHOUT triggering refetch that resets inputs!
+        queryClient.setQueryData(["interview", bookId], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            topics: oldData.topics.map((t: any) => ({
+              ...t,
+              qa: t.qa.map((q: any) => (q.id === qaId ? { ...q, answer } : q)),
+            })),
+          };
+        });
+
+        console.log(`[Interview] Auto Save Completed & Database Saved for ${qaId}`);
+        setSavingStatus("saved");
+        setLastSavedTime(format(new Date(), "h:mm a"));
+      } catch (err: any) {
+        console.error(`[Interview] Auto Save Failed for ${qaId}:`, err);
+        setSavingStatus("failed");
+        toast.error("Failed to save answer. Will retry automatically.");
+      } finally {
+        isSavingRef.current = false;
+      }
+    },
+    [bookId, saveFn, queryClient],
+  );
+
+  // Debounced auto-save effect (2.5s timeout)
   useEffect(() => {
     if (paused || !currentTopic) return;
 
-    const timeout = setTimeout(async () => {
+    const timeout = setTimeout(() => {
       for (const q of currentTopic.qa) {
         const currentVal = drafts[q.id] ?? "";
-        const originalVal = q.answer ?? "";
-        if (currentVal !== originalVal && currentVal !== previousDraftsRef.current[q.id]) {
-          previousDraftsRef.current[q.id] = currentVal;
-          saveMutation.mutate({ qaId: q.id, answer: currentVal });
+        const savedVal = savedAnswersRef.current[q.id] ?? "";
+        if (currentVal !== savedVal) {
+          performSave(q.id, currentVal);
         }
       }
-    }, 800);
+    }, 2500);
 
     return () => clearTimeout(timeout);
-  }, [drafts, currentTopic, paused]);
+  }, [drafts, currentTopic, paused, performSave]);
+
+  // Window Online Event Listener for Automatic Offline Recovery
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log("[Interview] Network reconnected - retrying pending auto-saves");
+      if (!currentTopic) return;
+      for (const q of currentTopic.qa) {
+        const currentVal = drafts[q.id] ?? "";
+        const savedVal = savedAnswersRef.current[q.id] ?? "";
+        if (currentVal !== savedVal) {
+          performSave(q.id, currentVal);
+        }
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [drafts, currentTopic, performSave]);
 
   const generateMutation = useMutation({
     mutationFn: (topic: string) => generateFn({ data: { bookId, topic } }),
@@ -180,8 +294,8 @@ function InterviewPage() {
     );
     for (const q of stepQas) {
       const currentVal = drafts[q.id] ?? "";
-      if (currentVal !== (q.answer ?? "")) {
-        await saveMutation.mutateAsync({ qaId: q.id, answer: currentVal });
+      if (currentVal !== (savedAnswersRef.current[q.id] ?? "")) {
+        await performSave(q.id, currentVal);
       }
     }
   };
@@ -239,14 +353,14 @@ function InterviewPage() {
     if (!currentTopic) return;
     setValidationError(null);
 
-    // Validate that required questions in the current 3-question step have answers
+    // Validate that required questions in the current step have answers
     const unansweredInStep = currentStepQas.filter((q) => {
       const val = drafts[q.id] ?? "";
       return !val || val.trim().length === 0;
     });
 
     if (unansweredInStep.length > 0) {
-      const msg = "Please complete all 3 questions on this step before proceeding.";
+      const msg = `Please complete all ${currentStepQas.length} questions on this step before proceeding.`;
       setValidationError(msg);
       toast.error(msg);
       return;
@@ -337,7 +451,7 @@ function InterviewPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">AI Interview</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            We present <strong>3 questions at a time</strong>. Your progress and answers autosave automatically.
+            We present <strong>3 questions at a time</strong>. Your answers auto-save reliably as you type.
           </p>
         </div>
 
@@ -446,7 +560,7 @@ function InterviewPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <SaveIndicator status={savingStatus} />
+                  <SaveStatusIndicator status={savingStatus} lastSavedTime={lastSavedTime} />
                   <button
                     onClick={() => setPaused((p) => !p)}
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -565,10 +679,7 @@ function InterviewPage() {
                           <div className="relative">
                             <Textarea
                               value={val}
-                              onChange={(e) => {
-                                setValidationError(null);
-                                setDrafts((prev) => ({ ...prev, [qa.id]: e.target.value }));
-                              }}
+                              onChange={(e) => handleTextareaChange(qa.id, e.target.value)}
                               placeholder={`Answer Question ${absoluteIndex} in as much detail as you'd like…`}
                               rows={4}
                               className={validationError && isMissing ? "border-destructive" : ""}
@@ -644,18 +755,38 @@ function InterviewPage() {
   );
 }
 
-function SaveIndicator({ status }: { status: "idle" | "saving" | "saved" }) {
-  if (status === "saving")
+function SaveStatusIndicator({
+  status,
+  lastSavedTime,
+}: {
+  status: SaveStatus;
+  lastSavedTime: string | null;
+}) {
+  if (status === "saving") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> Saving…
       </span>
     );
-  if (status === "saved")
+  }
+
+  if (status === "saved") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
-        <Save className="h-3 w-3" /> Saved
+      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+        <Check className="h-3.5 w-3.5 text-emerald-600" />
+        Saved ✓ {lastSavedTime ? `(Last Saved: ${lastSavedTime})` : ""}
       </span>
     );
+  }
+
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-destructive font-medium">
+        <AlertCircle className="h-3.5 w-3.5 text-destructive animate-pulse" />
+        Failed to Save (Retrying…)
+      </span>
+    );
+  }
+
   return null;
 }
