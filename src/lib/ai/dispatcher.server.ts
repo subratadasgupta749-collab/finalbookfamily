@@ -304,13 +304,6 @@ async function callGemini(
 ) {
   const sanitizedKey = apiKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
 
-  // Format Check Safeguard
-  if (sanitizedKey.startsWith("sk-")) {
-    throw new Error(
-      `[API Key Format Mismatch] Key starts with 'sk-' (OpenAI key format), but you are requesting Google Gemini! Please enter a valid Google AI Studio key (starts with 'AIzaSy' or 'AQ.').`,
-    );
-  }
-
   // Base URL for Google AI Studio
   const rawBase = row.base_url || "https://generativelanguage.googleapis.com";
   const base = rawBase
@@ -323,12 +316,8 @@ async function callGemini(
     cleanModel = "gemini-1.5-flash"; // Auto-correct legacy model name
   }
 
-  const isOAuthToken = sanitizedKey.startsWith("AQ.") || sanitizedKey.startsWith("ya29.");
-
-  // For OAuth2 tokens (AQ...), DO NOT pass ?key= parameter in URL because Google API Gateway rejects ?key with OAuth tokens
-  const url = isOAuthToken
-    ? `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`
-    : `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
+  // Google AI Studio URL with API Key query parameter
+  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
 
   const body: Record<string, unknown> = {
     contents: [
@@ -354,18 +343,20 @@ async function callGemini(
   const sys = opts.system ?? row.system_prompt;
   if (sys) body.systemInstruction = { parts: [{ text: sys }] };
 
+  // Headers: Pure application/json (NO Authorization: Bearer, NO OAuth headers)
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  if (isOAuthToken) {
-    headers["Authorization"] = `Bearer ${sanitizedKey}`;
-  } else {
-    headers["x-goog-api-key"] = sanitizedKey;
-  }
+  const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "(Empty)";
+  const maskedUrl = `${base}/v1beta/models/${cleanModel}:generateContent?key=${maskedKey}`;
 
-  const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "Present";
-  console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Auth Type: ${isOAuthToken ? "OAuth2 Bearer Token" : "API Key"} | Key: ${maskedKey}`);
+  console.log(`[Google AI Studio Audit Call]
+Selected Provider: ${row.name} (${row.slug})
+Base URL: ${base}
+Selected Model: ${cleanModel}
+Authentication Method: API Key Query Parameter (?key=)
+Final Request URL: ${maskedUrl}`);
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
@@ -386,22 +377,17 @@ async function callGemini(
         parsedError = errJson?.error?.message || errorText;
       } catch {}
 
-      if (res.status === 401 && isOAuthToken) {
-        parsedError = `${parsedError} — The token starting with 'AQ.' is an expired or invalid OAuth access token. Google AI Studio REST API requires a permanent API key. Please generate a permanent API key starting with 'AIzaSy...' at https://aistudio.google.com/app/apikey`;
-      } else if (res.status === 401) {
-        parsedError = `${parsedError} — Google AI Studio rejected this API key. Please verify your key at https://aistudio.google.com/app/apikey`;
-      }
-
-      const auditLog = `[Google Gemini Audit Error]
-Provider: ${row.name} (${row.slug}) [Type: gemini]
+      const auditLog = `[Google AI Studio Audit Failure]
+Selected Provider: ${row.name} (${row.slug}) [Type: gemini]
 Base URL: ${base}
-Model: ${cleanModel}
-Auth Status: Key Present (${maskedKey} [Length: ${sanitizedKey.length}])
+Selected Model: ${cleanModel}
+Authentication Method: API Key Query Parameter (?key=)
+Final Request URL: ${maskedUrl}
 HTTP Status: ${res.status} ${res.statusText}
-Google Error Response: ${parsedError}`;
+Raw Google Response: ${errorText}`;
 
       console.error(auditLog);
-      throw new Error(`[${res.status}] Gemini API Error: ${parsedError}`);
+      throw new Error(`[${res.status}] Google AI Studio Error: ${parsedError}`);
     }
 
     const json = (await res.json()) as any;
