@@ -23,12 +23,28 @@ export const listProviders = createServerFn({ method: "GET" })
       .select("*")
       .order("priority", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r: any) => ({
-      ...r,
-      api_key_encrypted: undefined,
-      api_key_preview: r.api_key_encrypted ? "••••••••" : null,
-      has_key: !!r.api_key_encrypted,
-    }));
+    return (data ?? []).map((r: any) => {
+      const hasEnvKey =
+        (r.provider_type === "gemini" && !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY)) ||
+        (r.provider_type === "openai_compatible" && !!process.env.OPENAI_API_KEY) ||
+        (r.provider_type === "anthropic" && !!process.env.ANTHROPIC_API_KEY) ||
+        (r.provider_type === "lovable" && !!process.env.LOVABLE_API_KEY);
+
+      const hasKey = !!r.api_key_encrypted || hasEnvKey;
+      const keyPreview = r.api_key_encrypted
+        ? "••••••••"
+        : hasEnvKey
+        ? "env_key"
+        : null;
+
+      return {
+        ...r,
+        api_key_encrypted: undefined,
+        api_key_preview: keyPreview,
+        has_key: hasKey,
+        key_source: r.api_key_encrypted ? "Database" : hasEnvKey ? "Environment" : "None",
+      };
+    });
   });
 
 const providerPatch = z.object({

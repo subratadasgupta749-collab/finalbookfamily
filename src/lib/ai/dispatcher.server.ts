@@ -159,13 +159,67 @@ async function logCall(entry: {
   } catch { return null; }
 }
 
+function resolveApiKey(row: ProviderRow): { key: string; source: string } {
+  const decrypted = decryptKey(row);
+  if (decrypted && decrypted.trim().length > 0) {
+    return { key: decrypted.trim(), source: "Database (Encrypted)" };
+  }
+
+  // Fallback to environment variables
+  if (row.provider_type === "gemini" || row.slug.includes("gemini")) {
+    const envKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_AI_STUDIO_API_KEY ||
+      process.env.GOOGLE_API_KEY;
+    if (envKey && envKey.trim().length > 0) {
+      return { key: envKey.trim(), source: "Environment Variable (GEMINI_API_KEY)" };
+    }
+  }
+
+  if (row.provider_type === "openai_compatible" || row.slug.includes("openai")) {
+    const envKey = process.env.OPENAI_API_KEY;
+    if (envKey && envKey.trim().length > 0) {
+      return { key: envKey.trim(), source: "Environment Variable (OPENAI_API_KEY)" };
+    }
+  }
+
+  if (row.provider_type === "anthropic" || row.slug.includes("anthropic")) {
+    const envKey = process.env.ANTHROPIC_API_KEY;
+    if (envKey && envKey.trim().length > 0) {
+      return { key: envKey.trim(), source: "Environment Variable (ANTHROPIC_API_KEY)" };
+    }
+  }
+
+  if (row.provider_type === "lovable") {
+    const envKey = process.env.LOVABLE_API_KEY;
+    if (envKey && envKey.trim().length > 0) {
+      return { key: envKey.trim(), source: "Environment Variable (LOVABLE_API_KEY)" };
+    }
+  }
+
+  // Generic fallback
+  const genericKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.OPENAI_API_KEY;
+  if (genericKey && genericKey.trim().length > 0) {
+    return { key: genericKey.trim(), source: "Environment Variable (Generic)" };
+  }
+
+  return { key: "", source: "None" };
+}
+
 /* ---------- Provider adapters ---------- */
 
 async function callOpenAiCompatible(
-  row: ProviderRow, apiKey: string, model: string, opts: AiCallOptions,
+  row: ProviderRow,
+  apiKey: string,
+  model: string,
+  opts: AiCallOptions,
   overrides?: { baseUrl?: string; authHeader?: "bearer" | "lovable" },
 ): Promise<{ text: string; tokensIn: number; tokensOut: number }> {
-  const base = (overrides?.baseUrl ?? row.base_url ?? "").replace(/\/+$/, "");
+  const rawBase = overrides?.baseUrl ?? row.base_url ?? "https://api.openai.com/v1";
+  const base = rawBase.replace(/\/+$/, "");
   const url = `${base}/chat/completions`;
   const body: Record<string, unknown> = {
     model,
@@ -185,7 +239,8 @@ async function callOpenAiCompatible(
   if (row.presence_penalty != null) body.presence_penalty = row.presence_penalty;
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (overrides?.authHeader === "lovable") {
+  const isLovableHeader = overrides?.authHeader === "lovable";
+  if (isLovableHeader) {
     headers["Lovable-API-Key"] = apiKey;
     headers["X-Lovable-AIG-SDK"] = "custom";
   } else {
@@ -193,104 +248,258 @@ async function callOpenAiCompatible(
   }
 
   const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms);
+  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
   try {
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: ctrl.signal });
+    console.log(`[AI Audit Call] Provider: ${row.name} (${row.slug}) | Model: ${model} | URL: ${url}`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+
     if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`[${res.status}] ${t.slice(0, 300)}`);
+      const errorText = await res.text();
+      const auditLog = `[AI Provider Audit Error]
+Provider: ${row.name} (${row.slug}) [Type: ${row.provider_type}]
+Base URL: ${base}
+Model: ${model}
+Auth Method: ${isLovableHeader ? "Lovable-API-Key Header" : "Bearer Token Header"}
+HTTP Status: ${res.status} ${res.statusText}
+Raw Error Response: ${errorText}`;
+
+      console.error(auditLog);
+      throw new Error(`[${res.status}] ${row.name} API Error: ${errorText}`);
     }
+
     const json = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const text = json.choices?.[0]?.message?.content?.trim() ?? "";
-    if (!text) throw new Error("Empty response from provider.");
-    return { text, tokensIn: json.usage?.prompt_tokens ?? 0, tokensOut: json.usage?.completion_tokens ?? 0 };
-  } finally { clearTimeout(timeout); }
+    if (!text) throw new Error("Empty response from OpenAI-compatible provider.");
+    return {
+      text,
+      tokensIn: json.usage?.prompt_tokens ?? 0,
+      tokensOut: json.usage?.completion_tokens ?? 0,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-async function callGemini(row: ProviderRow, apiKey: string, model: string, opts: AiCallOptions) {
-  const base = (row.base_url ?? "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
-  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+async function callGemini(
+  row: ProviderRow,
+  apiKey: string,
+  model: string,
+  opts: AiCallOptions,
+) {
+  // Normalize Base URL for Google AI Studio
+  const rawBase = row.base_url || "https://generativelanguage.googleapis.com";
+  const base = rawBase
+    .replace(/\/+(v1beta|v1|models)*\/*$/, "")
+    .replace(/\/+$/, "");
+
+  // Clean model name (strip "models/" prefix if present)
+  let cleanModel = (model || row.default_model || "gemini-1.5-flash").replace(/^models\//, "");
+  if (cleanModel === "gemini-2.5-flash") {
+    cleanModel = "gemini-1.5-flash"; // Fix legacy invalid default model name
+  }
+
+  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
   const body: Record<string, unknown> = {
     contents: [{ role: "user", parts: [{ text: opts.user }] }],
     generationConfig: {
-      ...(opts.temperature != null ? { temperature: opts.temperature } : row.temperature != null ? { temperature: row.temperature } : {}),
-      ...(opts.maxTokens != null ? { maxOutputTokens: opts.maxTokens } : row.max_tokens != null ? { maxOutputTokens: row.max_tokens } : {}),
+      ...(opts.temperature != null
+        ? { temperature: opts.temperature }
+        : row.temperature != null
+        ? { temperature: row.temperature }
+        : {}),
+      ...(opts.maxTokens != null
+        ? { maxOutputTokens: opts.maxTokens }
+        : row.max_tokens != null
+        ? { maxOutputTokens: row.max_tokens }
+        : {}),
       ...(row.top_p != null ? { topP: row.top_p } : {}),
     },
   };
+
   const sys = opts.system ?? row.system_prompt;
   if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+
+  const maskedKey = apiKey.length > 8 ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : "Present";
+  console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Key: ${maskedKey}`);
+
   const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms);
+  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
+
   try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal });
-    if (!res.ok) { const t = await res.text(); throw new Error(`[${res.status}] ${t.slice(0, 300)}`); }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      let parsedError: string = errorText;
+      try {
+        const errJson = JSON.parse(errorText);
+        parsedError = errJson?.error?.message || errorText;
+      } catch {}
+
+      const auditLog = `[Google Gemini Audit Error]
+Provider: ${row.name} (${row.slug}) [Type: gemini]
+Base URL: ${base}
+Model: ${cleanModel}
+Auth Status: Present (Key: ${maskedKey} [Length: ${apiKey.length}])
+HTTP Status: ${res.status} ${res.statusText}
+Google Error Response: ${parsedError}`;
+
+      console.error(auditLog);
+      throw new Error(`[${res.status}] Gemini API Error: ${parsedError}`);
+    }
+
     const json = (await res.json()) as any;
-    const text = json.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("").trim() ?? "";
-    if (!text) throw new Error("Empty response from Gemini.");
-    return { text, tokensIn: json.usageMetadata?.promptTokenCount ?? 0, tokensOut: json.usageMetadata?.candidatesTokenCount ?? 0 };
-  } finally { clearTimeout(timeout); }
+    const text =
+      json.candidates?.[0]?.content?.parts
+        ?.map((p: any) => p.text ?? "")
+        .join("")
+        .trim() ?? "";
+
+    if (!text) {
+      if (json.candidates?.[0]?.finishReason) {
+        throw new Error(`Gemini response blocked. Finish reason: ${json.candidates[0].finishReason}`);
+      }
+      throw new Error("Empty response from Google Gemini API.");
+    }
+
+    return {
+      text,
+      tokensIn: json.usageMetadata?.promptTokenCount ?? 0,
+      tokensOut: json.usageMetadata?.candidatesTokenCount ?? 0,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-async function callAnthropic(row: ProviderRow, apiKey: string, model: string, opts: AiCallOptions) {
-  const base = (row.base_url ?? "https://api.anthropic.com").replace(/\/+$/, "");
+async function callAnthropic(
+  row: ProviderRow,
+  apiKey: string,
+  model: string,
+  opts: AiCallOptions,
+) {
+  const rawBase = row.base_url || "https://api.anthropic.com";
+  const base = rawBase.replace(/\/+$/, "");
   const body: Record<string, unknown> = {
-    model, max_tokens: opts.maxTokens ?? row.max_tokens ?? 1024,
+    model,
+    max_tokens: opts.maxTokens ?? row.max_tokens ?? 1024,
     messages: [{ role: "user", content: opts.user }],
   };
   const sys = opts.system ?? row.system_prompt;
   if (sys) body.system = sys;
   const temp = opts.temperature ?? row.temperature;
   if (temp != null) body.temperature = temp;
+
   const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms);
+  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
   try {
     const res = await fetch(`${base}/v1/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(body), signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
-    if (!res.ok) { const t = await res.text(); throw new Error(`[${res.status}] ${t.slice(0, 300)}`); }
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`[${res.status}] Anthropic API Error: ${errorText}`);
+    }
+
     const json = (await res.json()) as any;
     const text = (json.content ?? []).map((c: any) => c.text ?? "").join("").trim();
     if (!text) throw new Error("Empty response from Anthropic.");
-    return { text, tokensIn: json.usage?.input_tokens ?? 0, tokensOut: json.usage?.output_tokens ?? 0 };
-  } finally { clearTimeout(timeout); }
+    return {
+      text,
+      tokensIn: json.usage?.input_tokens ?? 0,
+      tokensOut: json.usage?.output_tokens ?? 0,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function callProvider(row: ProviderRow, opts: AiCallOptions): Promise<AiCallResult> {
+  const keyInfo = resolveApiKey(row);
+  if (!keyInfo.key) {
+    throw new Error(
+      `[AI Provider Config Error] ${row.name} (${row.slug}): No API Key configured in Database or Environment Variables.`,
+    );
+  }
+
+  const model = opts.model || row.default_model || "gemini-1.5-flash";
+
+  // Safeguard Auto-Detection: Determine if this request MUST route to Gemini
   const isLovable = row.provider_type === "lovable";
-  const apiKey = isLovable ? (decryptKey(row) ?? process.env.LOVABLE_API_KEY ?? "") : decryptKey(row);
-  if (!apiKey) throw new Error(`${row.name}: no API key configured.`);
-  const model = opts.model || row.default_model;
-  if (!model) throw new Error(`${row.name}: no model configured.`);
+  const modelLower = model.toLowerCase();
+  const slugLower = row.slug.toLowerCase();
+  const baseUrlLower = (row.base_url || "").toLowerCase();
+
+  const isGeminiModel = modelLower.includes("gemini");
+  const isGeminiSlug = slugLower.includes("gemini");
+  const isGeminiUrl = baseUrlLower.includes("generativelanguage.googleapis.com");
+  const isGeminiType = row.provider_type === "gemini" || isGeminiModel || isGeminiSlug || isGeminiUrl;
 
   const started = Date.now();
   let attempt = 0;
   const maxAttempts = Math.max(1, (row.retry_attempts ?? 0) + 1);
   let lastErr: unknown;
+
   while (attempt < maxAttempts) {
     try {
-      let out;
-      if (row.provider_type === "gemini") out = await callGemini(row, apiKey, model, opts);
-      else if (row.provider_type === "anthropic") out = await callAnthropic(row, apiKey, model, opts);
-      else if (isLovable) out = await callOpenAiCompatible(row, apiKey, model, opts, {
-        baseUrl: row.base_url ?? "https://ai.gateway.lovable.dev/v1", authHeader: "lovable",
-      });
-      else out = await callOpenAiCompatible(row, apiKey, model, opts);
+      let out: { text: string; tokensIn: number; tokensOut: number };
+
+      if (isGeminiType) {
+        // Enforce Gemini API Handler
+        out = await callGemini(row, keyInfo.key, model, opts);
+      } else if (row.provider_type === "anthropic" || modelLower.includes("claude")) {
+        out = await callAnthropic(row, keyInfo.key, model, opts);
+      } else if (isLovable) {
+        out = await callOpenAiCompatible(row, keyInfo.key, model, opts, {
+          baseUrl: row.base_url ?? "https://ai.gateway.lovable.dev/v1",
+          authHeader: "lovable",
+        });
+      } else {
+        out = await callOpenAiCompatible(row, keyInfo.key, model, opts);
+      }
+
       const responseTimeMs = Date.now() - started;
       const cost = await getModelCost(model);
       const costUsd = (out.tokensIn / 1000) * cost.input + (out.tokensOut / 1000) * cost.output;
-      return { text: out.text, provider: row.slug, model, tokensIn: out.tokensIn, tokensOut: out.tokensOut, responseTimeMs, costUsd };
+
+      return {
+        text: out.text,
+        provider: row.slug,
+        model,
+        tokensIn: out.tokensIn,
+        tokensOut: out.tokensOut,
+        responseTimeMs,
+        costUsd,
+      };
     } catch (err) {
       lastErr = err;
       attempt++;
       if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 400 * attempt));
     }
   }
+
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
@@ -348,22 +557,51 @@ export async function testProvider(providerId: string): Promise<{ ok: boolean; m
   const { data, error } = await supabaseAdmin.from("ai_providers").select("*").eq("id", providerId).maybeSingle();
   if (error || !data) return { ok: false, message: error?.message ?? "Provider not found" };
   const row = data as ProviderRow;
+
+  const keyInfo = resolveApiKey(row);
+  const model = row.default_model || "gemini-1.5-flash";
+  const maskedKey = keyInfo.key ? `${keyInfo.key.slice(0, 6)}... (${keyInfo.source})` : "Missing Key";
+  const rawBase = row.base_url || (row.provider_type === "gemini" ? "https://generativelanguage.googleapis.com" : "https://api.openai.com/v1");
+
+  console.log(`[AI Provider Audit Test]
+Provider: ${row.name} (${row.slug})
+Type: ${row.provider_type}
+Base URL: ${rawBase}
+Model: ${model}
+Auth Status: Key Source: ${keyInfo.source} | Key: ${maskedKey}`);
+
   const t0 = Date.now();
   try {
     const res = await callProvider(row, { user: "Reply with the single word: pong", maxTokens: 8, temperature: 0 });
     const latency = Date.now() - t0;
     await updateProviderHealth(row.id, true, latency);
     await supabaseAdmin.from("ai_providers").update({
-      status: "ok", last_tested_at: new Date().toISOString(), last_test_message: "OK",
+      status: "ok",
+      last_tested_at: new Date().toISOString(),
+      last_test_message: `OK — ${res.model} (${res.responseTimeMs}ms) [Key: ${keyInfo.source}]`,
     }).eq("id", providerId);
-    return { ok: true, message: `OK — ${res.model} (${res.responseTimeMs}ms)` };
+
+    return {
+      ok: true,
+      message: `OK — ${row.name} (${res.model}) responded in ${res.responseTimeMs}ms. [Key Source: ${keyInfo.source}]`,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const latency = Date.now() - t0;
     await updateProviderHealth(row.id, false, latency, msg);
+
+    const detailedMessage = `[Provider Audit Failure]
+Provider: ${row.name} (${row.slug}) | Type: ${row.provider_type}
+Base URL: ${rawBase} | Model: ${model}
+Auth: ${keyInfo.source}
+Error Detail: ${msg}`;
+
     await supabaseAdmin.from("ai_providers").update({
-      status: "error", last_tested_at: new Date().toISOString(), last_test_message: msg.slice(0, 500),
+      status: "error",
+      last_tested_at: new Date().toISOString(),
+      last_test_message: detailedMessage.slice(0, 1000),
     }).eq("id", providerId);
+
     return { ok: false, message: msg };
   }
 }
