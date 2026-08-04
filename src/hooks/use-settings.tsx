@@ -68,6 +68,15 @@ export type PublicSettings = {
   };
   legal?: Record<string, string>;
   media?: Record<string, any>;
+  book_generation?: {
+    enabled?: boolean;
+    est_time_seconds?: number;
+    progress_messages?: string[];
+    stages?: string[];
+    animation_speed?: "slow" | "normal" | "fast";
+    success_message?: string;
+    error_message?: string;
+  };
 };
 
 const SettingsCtx = createContext<PublicSettings>({});

@@ -19,6 +19,8 @@ import {
 } from "@/lib/manuscript.functions";
 import { getAvailableThemes } from "@/lib/themes.functions";
 
+import { BookGenerationModal } from "@/components/books/book-generation-modal";
+
 const manuscriptQueryOptions = (bookId: string) =>
   queryOptions({
     queryKey: ["manuscript", bookId],
@@ -60,6 +62,8 @@ function ManuscriptPage() {
   const generateFn = useServerFn(generateBook);
   const setThemeFn = useServerFn(setTheme);
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const themeList = useMemo(() => {
     if (dbThemes && dbThemes.length > 0) {
       return dbThemes.map((t) => ({ id: t.slug, label: t.name, description: t.description }));
@@ -67,14 +71,10 @@ function ManuscriptPage() {
     return BOOK_THEMES;
   }, [dbThemes]);
 
-  const generateMutation = useMutation({
-    mutationFn: () => generateFn({ data: { bookId } }),
-    onSuccess: () => {
-      toast.success("Book generated");
-      queryClient.invalidateQueries({ queryKey: ["manuscript", bookId] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const handleExecuteGenerate = async () => {
+    await generateFn({ data: { bookId } });
+    await queryClient.invalidateQueries({ queryKey: ["manuscript", bookId] });
+  };
 
   const themeMutation = useMutation({
     mutationFn: (theme: BookThemeId) => setThemeFn({ data: { bookId, theme } }),
@@ -91,6 +91,14 @@ function ManuscriptPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <BookGenerationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onGenerate={handleExecuteGenerate}
+        bookId={bookId}
+        theme={theme}
+      />
+
       <Link
         to="/books/$bookId"
         params={{ bookId }}
@@ -107,15 +115,11 @@ function ManuscriptPage() {
           </p>
         </div>
         <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
+          onClick={() => setIsModalOpen(true)}
           size="lg"
+          className="shadow-sm"
         >
-          {generateMutation.isPending ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Writing…</>
-          ) : (
-            <><Sparkles className="mr-2 h-4 w-4" /> {hasContent ? "Regenerate book" : "Generate book"}</>
-          )}
+          <Sparkles className="mr-2 h-4 w-4" /> {hasContent ? "Regenerate book" : "Generate My Book"}
         </Button>
       </div>
 
@@ -146,13 +150,18 @@ function ManuscriptPage() {
       </section>
 
       {!hasContent ? (
-        <div className="mt-10 rounded-2xl border border-dashed border-border/60 bg-background p-10 text-center">
+        <div className="mt-10 rounded-2xl border border-dashed border-border/60 bg-background p-10 text-center space-y-4">
           <Sparkles className="mx-auto h-8 w-8 text-primary" />
-          <h3 className="mt-3 font-semibold">Your book hasn't been written yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Answer some interview questions, then click <strong>Generate book</strong> — Gemini will
-            craft chapter titles, narrative, a timeline, and pull-quotes.
-          </p>
+          <div>
+            <h3 className="font-semibold text-lg">Your book hasn't been written yet</h3>
+            <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
+              Answer interview questions, then click <strong>Generate My Book</strong> — AI will
+              craft chapter titles, narrative, timeline events, and pull-quotes.
+            </p>
+          </div>
+          <Button onClick={() => setIsModalOpen(true)} size="lg" className="rounded-xl shadow-md px-6">
+            <Sparkles className="mr-2 h-4 w-4" /> Generate My Book
+          </Button>
         </div>
       ) : (
         <ManuscriptEditor

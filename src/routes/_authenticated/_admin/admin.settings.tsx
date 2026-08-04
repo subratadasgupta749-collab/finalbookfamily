@@ -475,6 +475,119 @@ function CategoryEditor({
         </div>
       );
 
+    case "book_generation":
+      return (
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Switch checked={value.enabled ?? true} onCheckedChange={setBool("enabled")} />
+            <span className="text-sm font-medium">Enable Full-Screen Book Generation Loading Animation</span>
+          </div>
+
+          <div className={grid}>
+            <Field label="Estimated Generation Time (seconds)" hint="Time in seconds displayed to the user (e.g. 45)">
+              <Input
+                type="number"
+                min={10}
+                max={300}
+                value={value.est_time_seconds ?? 45}
+                onChange={setNum("est_time_seconds")}
+              />
+            </Field>
+
+            <Field label="Animation Speed">
+              <select
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={value.animation_speed ?? "normal"}
+                onChange={set("animation_speed")}
+              >
+                <option value="slow">Slow</option>
+                <option value="normal">Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className={grid}>
+            <Field label="Success Message Title">
+              <Input
+                value={value.success_message ?? "Your book has been created successfully!"}
+                onChange={set("success_message")}
+              />
+            </Field>
+
+            <Field label="Error Message Title">
+              <Input
+                value={value.error_message ?? "We couldn't finish generating your book right now. Please try again."}
+                onChange={set("error_message")}
+              />
+            </Field>
+          </div>
+
+          <Field
+            label="Rotating Progress Messages (One per line)"
+            hint="Displayed every 3–5 seconds during book generation"
+          >
+            <Textarea
+              rows={6}
+              value={
+                Array.isArray(value.progress_messages)
+                  ? value.progress_messages.join("\n")
+                  : (value.progress_messages ?? [
+                      "Collecting your memories...",
+                      "Writing your life story...",
+                      "Creating beautiful chapters...",
+                      "Choosing the perfect layout...",
+                      "Preparing your keepsake book...",
+                      "Adding finishing touches...",
+                      "Almost there...",
+                    ]).join("\n")
+              }
+              onChange={(e) =>
+                onChange({
+                  progress_messages: e.target.value
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
+          </Field>
+
+          <Field
+            label="Generation Stages (One per line)"
+            hint="Step-by-step progress checklist shown to the user"
+          >
+            <Textarea
+              rows={9}
+              value={
+                Array.isArray(value.stages)
+                  ? value.stages.join("\n")
+                  : (value.stages ?? [
+                      "Preparing your interview responses...",
+                      "Organizing your family memories...",
+                      "Writing beautiful chapters with AI...",
+                      "Improving grammar and readability...",
+                      "Creating your book structure...",
+                      "Designing your selected theme...",
+                      "Optimizing photos...",
+                      "Building PDF preview...",
+                      "Final quality checks...",
+                      "🎉 Your Family History Book is almost ready!",
+                    ]).join("\n")
+              }
+              onChange={(e) =>
+                onChange({
+                  stages: e.target.value
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
+          </Field>
+        </div>
+      );
+
     default:
       return <JsonEditor label="JSON" value={value} onChange={(v) => onChange(v as Record<string, any>)} />;
   }

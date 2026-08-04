@@ -15,6 +15,7 @@ export const PUBLIC_CATEGORIES = [
   "legal",
   "media",
   "interview",
+  "book_generation",
 ] as const;
 
 /** All known categories (admin panel tabs). */
@@ -32,6 +33,7 @@ export const ALL_CATEGORIES = [
   "media",
   "legal",
   "interview",
+  "book_generation",
 ] as const;
 
 /** Server-only: strip fields that must never leave the server. */
