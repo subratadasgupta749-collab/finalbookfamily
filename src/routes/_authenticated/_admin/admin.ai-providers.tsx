@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowDown, ArrowUp, CheckCircle2, Plus, Star, Trash2, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, Plus, RefreshCw, Star, Trash2, Zap } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/ai-providers")({
   head: () => ({ meta: [{ title: "AI Providers — Admin" }, { name: "robots", content: "noindex" }] }),
@@ -220,6 +220,25 @@ function ProviderCard({
               try { await setDefaultProvider({ data: { id: row.id } }); toast.success("Default set"); onChanged(); }
               catch (e: any) { toast.error(e?.message ?? "Failed"); }
             }}><Star className="mr-1 h-4 w-4" /> Set default</Button>
+          )}
+          {row.provider_type === "gemini" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const { syncGeminiModels } = await import("@/lib/ai/enterprise.functions");
+                  const r = await syncGeminiModels({ data: { providerId: row.id } });
+                  toast.success(`Synced ${r.totalSynced} models from Google. Default: ${r.details?.[0]?.defaultModel}`);
+                  onChanged();
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Sync failed");
+                }
+              }}
+              disabled={!row.has_key}
+            >
+              <RefreshCw className="mr-1 h-4 w-4" /> Sync Models
+            </Button>
           )}
           <Button size="sm" variant="outline" onClick={test} disabled={testing || !row.has_key}>
             <Zap className="mr-1 h-4 w-4" /> {testing ? "Testing…" : "Test"}

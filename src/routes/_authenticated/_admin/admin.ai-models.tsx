@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
-import { listModels, upsertModel, deleteModel } from "@/lib/ai/enterprise.functions";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { listModels, upsertModel, deleteModel, syncGeminiModels } from "@/lib/ai/enterprise.functions";
 import { listProviders } from "@/lib/ai/providers.functions";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/ai-models")({
@@ -23,6 +23,7 @@ function Page() {
   const [rows, setRows] = useState<any[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
 
   async function refresh() {
@@ -35,16 +36,35 @@ function Page() {
   }
   useEffect(() => { refresh(); }, []);
 
+  async function handleSyncGemini() {
+    setSyncing(true);
+    try {
+      const res = await syncGeminiModels({ data: {} });
+      toast.success(`Synced ${res.totalSynced} models from Google AI Studio. Default model: ${res.details?.[0]?.defaultModel ?? "updated"}`);
+      await refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to sync models from Google AI Studio");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">AI Models</h1>
           <p className="mt-1 text-muted-foreground">Manage models per provider with category, context window, and pricing.</p>
         </div>
-        <Button onClick={() => setEditing({ provider_id: providers[0]?.id ?? "", category: "text", enabled: true, cost_input_per_1k: 0, cost_output_per_1k: 0, supports_streaming: true, supports_json_mode: false, is_default: false, status: "active" })}>
-          <Plus className="mr-2 h-4 w-4" /> Add model
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleSyncGemini} disabled={syncing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing Google Models…" : "Sync Google Gemini Models"}
+          </Button>
+          <Button onClick={() => setEditing({ provider_id: providers[0]?.id ?? "", category: "text", enabled: true, cost_input_per_1k: 0, cost_output_per_1k: 0, supports_streaming: true, supports_json_mode: false, is_default: false, status: "active" })}>
+            <Plus className="mr-2 h-4 w-4" /> Add model
+          </Button>
+        </div>
       </div>
 
       {editing && <ModelForm value={editing} providers={providers} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}

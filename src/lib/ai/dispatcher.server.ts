@@ -310,108 +310,131 @@ async function callGemini(
     .replace(/\/+(v1beta|v1|models)*\/*$/, "")
     .replace(/\/+$/, "");
 
-  // Clean model name (strip "models/" prefix if present)
-  let cleanModel = (model || row.default_model || "gemini-1.5-flash").replace(/^models\//, "");
-  if (cleanModel === "gemini-2.5-flash") {
-    cleanModel = "gemini-1.5-flash"; // Auto-correct legacy model name
-  }
+  const userModel = (model || row.default_model || "gemini-2.5-flash").replace(/^models\//, "");
 
-  // Google AI Studio URL with API Key query parameter
-  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
+  // Candidate models to attempt in priority order if 404 Model Not Found occurs
+  const candidates = Array.from(
+    new Set([
+      userModel,
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-pro",
+    ]),
+  );
 
-  const body: Record<string, unknown> = {
-    contents: [
-      {
-        parts: [{ text: opts.user }],
+  let lastErrorText = "";
+  let lastStatus = 404;
+
+  for (const currentModel of candidates) {
+    const url = `${base}/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
+
+    const body: Record<string, unknown> = {
+      contents: [
+        {
+          parts: [{ text: opts.user }],
+        },
+      ],
+      generationConfig: {
+        ...(opts.temperature != null
+          ? { temperature: opts.temperature }
+          : row.temperature != null
+          ? { temperature: row.temperature }
+          : {}),
+        ...(opts.maxTokens != null
+          ? { maxOutputTokens: opts.maxTokens }
+          : row.max_tokens != null
+          ? { maxOutputTokens: row.max_tokens }
+          : {}),
+        ...(row.top_p != null ? { topP: row.top_p } : {}),
       },
-    ],
-    generationConfig: {
-      ...(opts.temperature != null
-        ? { temperature: opts.temperature }
-        : row.temperature != null
-        ? { temperature: row.temperature }
-        : {}),
-      ...(opts.maxTokens != null
-        ? { maxOutputTokens: opts.maxTokens }
-        : row.max_tokens != null
-        ? { maxOutputTokens: row.max_tokens }
-        : {}),
-      ...(row.top_p != null ? { topP: row.top_p } : {}),
-    },
-  };
+    };
 
-  const sys = opts.system ?? row.system_prompt;
-  if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+    const sys = opts.system ?? row.system_prompt;
+    if (sys) body.systemInstruction = { parts: [{ text: sys }] };
 
-  // Headers: Pure application/json (NO Authorization: Bearer, NO OAuth headers)
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
 
-  const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "(Empty)";
-  const maskedUrl = `${base}/v1beta/models/${cleanModel}:generateContent?key=${maskedKey}`;
+    const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "(Empty)";
+    const maskedUrl = `${base}/v1beta/models/${currentModel}:generateContent?key=${maskedKey}`;
 
-  console.log(`[Google AI Studio Audit Call]
-Selected Provider: ${row.name} (${row.slug})
-Base URL: ${base}
-Selected Model: ${cleanModel}
-Authentication Method: API Key Query Parameter (?key=)
-Final Request URL: ${maskedUrl}`);
+    console.log(`[Google AI Studio Call] Provider: ${row.name} (${row.slug}) | Model: ${currentModel} | Base: ${base}`);
 
-  const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      let parsedError: string = errorText;
-      try {
-        const errJson = JSON.parse(errorText);
-        parsedError = errJson?.error?.message || errorText;
-      } catch {}
+      if (!res.ok) {
+        const errorText = await res.text();
+        lastErrorText = errorText;
+        lastStatus = res.status;
 
-      const auditLog = `[Google AI Studio Audit Failure]
+        // If 404 Model Not Found, continue to next candidate in fallback chain
+        if (res.status === 404 && candidates.indexOf(currentModel) < candidates.length - 1) {
+          console.warn(`[Gemini 404 Fallback] Model '${currentModel}' not found on Google AI Studio API. Trying fallback candidate...`);
+          continue;
+        }
+
+        let parsedError: string = errorText;
+        try {
+          const errJson = JSON.parse(errorText);
+          parsedError = errJson?.error?.message || errorText;
+        } catch {}
+
+        const auditLog = `[Google AI Studio Audit Failure]
 Selected Provider: ${row.name} (${row.slug}) [Type: gemini]
 Base URL: ${base}
-Selected Model: ${cleanModel}
+Attempted Model: ${currentModel}
 Authentication Method: API Key Query Parameter (?key=)
 Final Request URL: ${maskedUrl}
 HTTP Status: ${res.status} ${res.statusText}
 Raw Google Response: ${errorText}`;
 
-      console.error(auditLog);
-      throw new Error(`[${res.status}] Google AI Studio Error: ${parsedError}`);
-    }
-
-    const json = (await res.json()) as any;
-    const text =
-      json.candidates?.[0]?.content?.parts
-        ?.map((p: any) => p.text ?? "")
-        .join("")
-        .trim() ?? "";
-
-    if (!text) {
-      if (json.candidates?.[0]?.finishReason) {
-        throw new Error(`Gemini response blocked. Finish reason: ${json.candidates[0].finishReason}`);
+        console.error(auditLog);
+        throw new Error(`[${res.status}] Google AI Studio Error: ${parsedError}`);
       }
-      throw new Error("Empty response from Google Gemini API.");
-    }
 
-    return {
-      text,
-      tokensIn: json.usageMetadata?.promptTokenCount ?? 0,
-      tokensOut: json.usageMetadata?.candidatesTokenCount ?? 0,
-    };
-  } finally {
-    clearTimeout(timeout);
+      const json = (await res.json()) as any;
+      const text =
+        json.candidates?.[0]?.content?.parts
+          ?.map((p: any) => p.text ?? "")
+          .join("")
+          .trim() ?? "";
+
+      if (!text) {
+        if (json.candidates?.[0]?.finishReason) {
+          throw new Error(`Gemini response blocked. Finish reason: ${json.candidates[0].finishReason}`);
+        }
+        throw new Error("Empty response from Google Gemini API.");
+      }
+
+      return {
+        text,
+        tokensIn: json.usageMetadata?.promptTokenCount ?? 0,
+        tokensOut: json.usageMetadata?.candidatesTokenCount ?? 0,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  let finalParsedError: string = lastErrorText;
+  try {
+    const errJson = JSON.parse(lastErrorText);
+    finalParsedError = errJson?.error?.message || lastErrorText;
+  } catch {}
+
+  throw new Error(`[${lastStatus}] Google AI Studio Error: ${finalParsedError}`);
 }
 
 async function callAnthropic(

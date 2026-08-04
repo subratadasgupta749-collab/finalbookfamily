@@ -79,6 +79,111 @@ export const deleteModel = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const syncGeminiModels = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d?: { providerId?: string }) =>
+    z.object({ providerId: z.string().uuid().optional() }).parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { resolveApiKey } = await import("./dispatcher.server");
+
+    let query = supabaseAdmin.from("ai_providers").select("*");
+    if (data.providerId) {
+      query = query.eq("id", data.providerId);
+    } else {
+      query = query.eq("provider_type", "gemini");
+    }
+
+    const { data: providers, error: pErr } = await query;
+    if (pErr) throw new Error(pErr.message);
+    if (!providers || providers.length === 0) {
+      throw new Error("No Gemini provider found to sync models.");
+    }
+
+    let totalSynced = 0;
+    const syncedDetails: Array<{ provider: string; count: number; defaultModel: string }> = [];
+
+    for (const provider of providers) {
+      const keyInfo = resolveApiKey(provider as any);
+      if (!keyInfo.key) continue;
+
+      const rawBase = provider.base_url || "https://generativelanguage.googleapis.com";
+      const base = rawBase.replace(/\/+(v1beta|v1|models)*\/*$/, "").replace(/\/+$/, "");
+      const url = `${base}/v1beta/models?key=${encodeURIComponent(keyInfo.key)}`;
+
+      const res = await fetch(url, { headers: { "Content-Type": "application/json" } });
+      if (!res.ok) {
+        const errorText = await res.text();
+        let parsedError: string = errorText;
+        try {
+          const errJson = JSON.parse(errorText);
+          parsedError = errJson?.error?.message || errorText;
+        } catch {}
+        throw new Error(`[${res.status}] Google AI Studio ListModels Error: ${parsedError}`);
+      }
+
+      const json = (await res.json()) as { models?: any[] };
+      const rawModels = json.models ?? [];
+      const geminiModels = rawModels.filter((m: any) =>
+        m.supportedGenerationMethods?.includes("generateContent"),
+      );
+
+      let providerCount = 0;
+      let bestDefault = "";
+
+      for (const m of geminiModels) {
+        const cleanName = m.name.replace(/^models\//, "");
+        const displayName = m.displayName || cleanName;
+
+        const { error: upsertErr } = await supabaseAdmin.from("ai_models").upsert(
+          {
+            provider_id: provider.id,
+            name: cleanName,
+            label: displayName,
+            category: "text",
+            context_window: m.inputTokenLimit ?? null,
+            max_tokens: m.outputTokenLimit ?? null,
+            cost_input_per_1k: 0.00015,
+            cost_output_per_1k: 0.0006,
+            supports_streaming: true,
+            supports_json_mode: true,
+            enabled: true,
+            status: "active",
+          },
+          { onConflict: "provider_id,name" },
+        );
+
+        if (!upsertErr) providerCount++;
+
+        if (cleanName === "gemini-2.5-flash") bestDefault = "gemini-2.5-flash";
+        else if (cleanName === "gemini-2.5-pro" && !bestDefault) bestDefault = "gemini-2.5-pro";
+        else if (cleanName.includes("flash") && !bestDefault) bestDefault = cleanName;
+      }
+
+      if (!bestDefault && geminiModels.length > 0) {
+        bestDefault = geminiModels[0].name.replace(/^models\//, "");
+      }
+
+      if (bestDefault) {
+        await supabaseAdmin
+          .from("ai_providers")
+          .update({ default_model: bestDefault })
+          .eq("id", provider.id);
+      }
+
+      totalSynced += providerCount;
+      syncedDetails.push({ provider: provider.name, count: providerCount, defaultModel: bestDefault });
+    }
+
+    return {
+      ok: true,
+      totalSynced,
+      details: syncedDetails,
+    };
+  });
+
 /* ============ FEATURE MAPPING ============ */
 
 export const listFeatureMappings = createServerFn({ method: "GET" })
