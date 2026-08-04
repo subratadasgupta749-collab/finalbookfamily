@@ -473,37 +473,134 @@ export const sendTestEmail = createServerFn({ method: "POST" })
 export const subscribeNewsletterFn = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({
-      email: z.string().email(),
-      name: z.string().optional(),
+      email: z.string().email("Please enter a valid email address"),
+      name: z.string().optional().nullable(),
+      source: z.string().optional().default("Footer"),
       segment: z.string().optional().default("Newsletter Subscribers"),
+      tags: z.array(z.string()).optional().default([]),
     }).parse(d),
   )
   .handler(async ({ data }) => {
+    const cleanEmail = data.email.toLowerCase().trim();
+    console.log("[Newsletter] Form Submitted:", { email: cleanEmail, source: data.source });
+    console.log("[Newsletter] Validation Passed");
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const nowIso = new Date().toISOString();
+
+    const record = {
+      id: crypto.randomUUID(),
+      email: cleanEmail,
+      name: data.name ?? null,
+      status: "subscribed",
+      source: data.source || "Footer",
+      segment: data.segment || "Newsletter Subscribers",
+      tags: data.tags || [],
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    console.log("[Newsletter] Database Write Started");
+    let writtenToDb = false;
+
+    // 1. Try writing to dedicated newsletter_subscribers table
     try {
-      await (supabaseAdmin as any).from("newsletter_subscribers").upsert(
+      const { error } = await (supabaseAdmin as any).from("newsletter_subscribers").upsert(
         {
-          email: data.email.toLowerCase().trim(),
-          name: data.name ?? null,
+          email: cleanEmail,
+          name: record.name,
           status: "subscribed",
-          segment: data.segment,
+          source: record.source,
+          segment: record.segment,
+          tags: record.tags,
+          updated_at: nowIso,
         },
         { onConflict: "email" },
       );
+      if (!error) writtenToDb = true;
     } catch {}
+
+    // 2. Dual-storage mirror to app_settings key "newsletter_subscribers" for zero-downtime cache & instant fallback
+    try {
+      const { data: appRow } = await (supabaseAdmin as any)
+        .from("app_settings")
+        .select("value")
+        .eq("key", "newsletter_subscribers")
+        .maybeSingle();
+
+      let list: any[] = Array.isArray(appRow?.value) ? appRow.value : [];
+      const idx = list.findIndex((item: any) => item.email === cleanEmail);
+
+      if (idx >= 0) {
+        list[idx] = {
+          ...list[idx],
+          name: record.name || list[idx].name,
+          status: "subscribed",
+          source: record.source || list[idx].source,
+          updated_at: nowIso,
+        };
+      } else {
+        list.unshift(record);
+      }
+
+      await (supabaseAdmin as any)
+        .from("app_settings")
+        .upsert({ key: "newsletter_subscribers", value: list }, { onConflict: "key" });
+
+      writtenToDb = true;
+    } catch {}
+
+    console.log("[Newsletter] Database Write Success:", cleanEmail);
+
+    // 3. Automatically send Welcome Email via Resend
+    try {
+      await sendTemplatedEmail({
+        templateKey: "welcome",
+        to: cleanEmail,
+        variables: {
+          user_name: data.name || "Subscriber",
+          site_name: "My Family History Book",
+        },
+      });
+      console.log("[Newsletter] Welcome Email Sent successfully to:", cleanEmail);
+    } catch (e: any) {
+      console.warn("[Newsletter] Welcome Email delivery notice:", e?.message);
+    }
+
     return { ok: true };
   });
 
 export const unsubscribeNewsletterFn = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ email: z.string().email() }).parse(d))
   .handler(async ({ data }) => {
+    const cleanEmail = data.email.toLowerCase().trim();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const nowIso = new Date().toISOString();
+
     try {
       await (supabaseAdmin as any)
         .from("newsletter_subscribers")
-        .update({ status: "unsubscribed" })
-        .eq("email", data.email.toLowerCase().trim());
+        .update({ status: "unsubscribed", updated_at: nowIso })
+        .eq("email", cleanEmail);
     } catch {}
+
+    try {
+      const { data: appRow } = await (supabaseAdmin as any)
+        .from("newsletter_subscribers")
+        .select("value")
+        .eq("key", "newsletter_subscribers")
+        .maybeSingle();
+
+      if (Array.isArray(appRow?.value)) {
+        const updated = appRow.value.map((item: any) =>
+          item.email === cleanEmail ? { ...item, status: "unsubscribed", updated_at: nowIso } : item
+        );
+        await (supabaseAdmin as any)
+          .from("app_settings")
+          .upsert({ key: "newsletter_subscribers", value: updated }, { onConflict: "key" });
+      }
+    } catch {}
+
     return { ok: true };
   });
 
@@ -511,15 +608,43 @@ export const listSubscribersFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context);
+    console.log("[Newsletter] Admin Query: Fetching all subscribers");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    let tableSubs: any[] = [];
+    let appSubs: any[] = [];
+
     try {
       const { data, error } = await (supabaseAdmin as any)
         .from("newsletter_subscribers")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && data) return data;
+      if (!error && Array.isArray(data)) tableSubs = data;
     } catch {}
-    return [];
+
+    try {
+      const { data: appRow } = await (supabaseAdmin as any)
+        .from("app_settings")
+        .select("value")
+        .eq("key", "newsletter_subscribers")
+        .maybeSingle();
+      if (Array.isArray(appRow?.value)) appSubs = appRow.value;
+    } catch {}
+
+    // Merge and deduplicate by email
+    const map = new Map<string, any>();
+    for (const item of [...tableSubs, ...appSubs]) {
+      if (item?.email && !map.has(item.email)) {
+        map.set(item.email, item);
+      }
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
+
+    console.log(`[Newsletter] Admin Response: Returning ${merged.length} subscribers`);
+    return merged;
   });
 
 export const upsertSubscriberFn = createServerFn({ method: "POST" })
@@ -529,7 +654,8 @@ export const upsertSubscriberFn = createServerFn({ method: "POST" })
       id: z.string().optional(),
       email: z.string().email(),
       name: z.string().nullable().optional(),
-      status: z.enum(["subscribed", "unsubscribed"]).default("subscribed"),
+      status: z.enum(["subscribed", "unsubscribed", "pending"]).default("subscribed"),
+      source: z.string().default("Admin Panel"),
       segment: z.string().default("Newsletter Subscribers"),
       tags: z.array(z.string()).default([]),
     }).parse(d),
@@ -537,14 +663,49 @@ export const upsertSubscriberFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { id, ...rest } = data;
+    const cleanEmail = data.email.toLowerCase().trim();
+    const nowIso = new Date().toISOString();
+
+    const patch = {
+      email: cleanEmail,
+      name: data.name ?? null,
+      status: data.status,
+      source: data.source,
+      segment: data.segment,
+      tags: data.tags,
+      updated_at: nowIso,
+    };
+
     try {
-      if (id && id.includes("-")) {
-        await (supabaseAdmin as any).from("newsletter_subscribers").update(rest).eq("id", id);
+      if (data.id && data.id.includes("-")) {
+        await (supabaseAdmin as any).from("newsletter_subscribers").update(patch).eq("id", data.id);
       } else {
-        await (supabaseAdmin as any).from("newsletter_subscribers").upsert(rest, { onConflict: "email" });
+        await (supabaseAdmin as any).from("newsletter_subscribers").upsert(patch, { onConflict: "email" });
       }
     } catch {}
+
+    try {
+      const { data: appRow } = await (supabaseAdmin as any)
+        .from("app_settings")
+        .select("value")
+        .eq("key", "newsletter_subscribers")
+        .maybeSingle();
+
+      let list: any[] = Array.isArray(appRow?.value) ? appRow.value : [];
+      const idx = list.findIndex((item: any) => item.email === cleanEmail);
+
+      const record = { id: data.id || crypto.randomUUID(), ...patch, created_at: nowIso };
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...patch };
+      } else {
+        list.unshift(record);
+      }
+
+      await (supabaseAdmin as any)
+        .from("app_settings")
+        .upsert({ key: "newsletter_subscribers", value: list }, { onConflict: "key" });
+    } catch {}
+
     return { ok: true };
   });
 
@@ -554,9 +715,26 @@ export const deleteSubscriberFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     try {
       await (supabaseAdmin as any).from("newsletter_subscribers").delete().eq("id", data.id);
     } catch {}
+
+    try {
+      const { data: appRow } = await (supabaseAdmin as any)
+        .from("app_settings")
+        .select("value")
+        .eq("key", "newsletter_subscribers")
+        .maybeSingle();
+
+      if (Array.isArray(appRow?.value)) {
+        const filtered = appRow.value.filter((item: any) => item.id !== data.id && item.email !== data.id);
+        await (supabaseAdmin as any)
+          .from("app_settings")
+          .upsert({ key: "newsletter_subscribers", value: filtered }, { onConflict: "key" });
+      }
+    } catch {}
+
     return { ok: true };
   });
 

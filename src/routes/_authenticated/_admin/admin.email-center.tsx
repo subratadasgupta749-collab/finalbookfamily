@@ -659,52 +659,191 @@ function ContactsTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [segmentFilter, setSegmentFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
 
   const refresh = async () => {
     setLoading(true);
-    try { setRows(await listSubscribersFn() as any[]); }
-    catch (e: any) { toast.error(e?.message ?? "Failed"); }
-    finally { setLoading(false); }
+    console.log("[Newsletter:Admin] API Started: Fetching subscriber contacts");
+    try {
+      const res = await listSubscribersFn();
+      console.log("[Newsletter:Admin] API Success: Loaded subscribers", res);
+      setRows(Array.isArray(res) ? res : []);
+    } catch (e: any) {
+      console.error("[Newsletter:Admin] API Failed:", e?.message);
+      toast.error(e?.message ?? "Failed to load subscribers");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    // 10s Auto-polling for real-time live subscriber updates
+    const timer = setInterval(() => { refresh(); }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const filteredRows = (Array.isArray(rows) ? rows : []).filter((s) => {
+    const matchSearch =
+      !search ||
+      s?.email?.toLowerCase().includes(search.toLowerCase()) ||
+      s?.name?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || s?.status === statusFilter;
+    const matchSegment = segmentFilter === "all" || s?.segment === segmentFilter;
+    const matchSource = sourceFilter === "all" || s?.source === sourceFilter;
+    return matchSearch && matchStatus && matchSegment && matchSource;
+  });
+
+  const exportCSV = () => {
+    if (filteredRows.length === 0) {
+      toast.error("No subscribers to export");
+      return;
+    }
+    const headers = ["ID", "Email", "Name", "Status", "Source", "Segment", "Tags", "Created At", "Updated At"];
+    const csvLines = [
+      headers.join(","),
+      ...filteredRows.map((r) =>
+        [
+          `"${r.id || ""}"`,
+          `"${r.email || ""}"`,
+          `"${r.name || ""}"`,
+          `"${r.status || ""}"`,
+          `"${r.source || ""}"`,
+          `"${r.segment || ""}"`,
+          `"${(r.tags || []).join(";")}"`,
+          `"${r.created_at || ""}"`,
+          `"${r.updated_at || ""}"`,
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([csvLines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `newsletter_subscribers_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredRows.length} subscribers to CSV`);
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Subscriber Contacts</h2>
-          <p className="text-xs text-muted-foreground">Manage subscriber contacts, segments, and subscription statuses.</p>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            Subscriber Contacts
+            <Badge variant="outline">{filteredRows.length} Subscribers</Badge>
+          </h2>
+          <p className="text-xs text-muted-foreground">Manage subscriber contacts, real-time sources, tags, and export data.</p>
         </div>
-        <Button onClick={() => setEditing({ email: "", name: "", status: "subscribed", segment: "Newsletter Subscribers" })}>
-          <Plus className="mr-2 h-4 w-4" /> Add Subscriber
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Copy className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+          <Button onClick={() => setEditing({ email: "", name: "", status: "subscribed", source: "Admin Panel", segment: "Newsletter Subscribers", tags: [] })}>
+            <Plus className="mr-2 h-4 w-4" /> Add Subscriber
+          </Button>
+        </div>
       </div>
 
-      {loading ? <div className="text-sm text-muted-foreground">Loading subscribers…</div> : (
+      {/* Filters Bar */}
+      <Card className="p-3 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <Input
+          placeholder="Search name or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="text-xs"
+        />
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="subscribed">Subscribed</SelectItem>
+            <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={segmentFilter} onValueChange={setSegmentFilter}>
+          <SelectTrigger className="text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Segments</SelectItem>
+            {SEGMENTS.map((seg) => <SelectItem key={seg} value={seg}>{seg}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            <SelectItem value="Homepage">Homepage</SelectItem>
+            <SelectItem value="Footer">Footer</SelectItem>
+            <SelectItem value="Popup">Popup</SelectItem>
+            <SelectItem value="Landing Page">Landing Page</SelectItem>
+            <SelectItem value="Admin Panel">Admin Panel</SelectItem>
+          </SelectContent>
+        </Select>
+      </Card>
+
+      {loading ? (
+        <Card className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center justify-center gap-2">
+          <RefreshCw className="h-5 w-5 animate-spin text-primary" /> Loading subscribers…
+        </Card>
+      ) : filteredRows.length === 0 ? (
+        <Card className="p-8 text-center space-y-3">
+          <Users className="h-10 w-10 text-muted-foreground mx-auto" />
+          <div className="font-medium text-base">No subscriber contacts found</div>
+          <p className="text-xs text-muted-foreground">No subscribers match your search filters.</p>
+        </Card>
+      ) : (
         <Card className="p-4 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b font-medium text-muted-foreground">
                 <th className="p-2">Email</th>
                 <th className="p-2">Name</th>
-                <th className="p-2">Segment</th>
                 <th className="p-2">Status</th>
+                <th className="p-2">Source</th>
+                <th className="p-2">Segment</th>
                 <th className="p-2">Subscribed At</th>
+                <th className="p-2">Last Updated</th>
                 <th className="p-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((s) => (
-                <tr key={s.id} className="border-b last:border-0 hover:bg-muted/40">
-                  <td className="p-2 font-mono">{s.email}</td>
+              {filteredRows.map((s) => (
+                <tr key={s.id || s.email} className="border-b last:border-0 hover:bg-muted/40">
+                  <td className="p-2 font-mono font-medium">{s.email}</td>
                   <td className="p-2">{s.name || "—"}</td>
-                  <td className="p-2"><Badge variant="outline">{s.segment}</Badge></td>
                   <td className="p-2">
                     <Badge variant={s.status === "subscribed" ? "default" : "secondary"}>{s.status}</Badge>
                   </td>
-                  <td className="p-2 text-muted-foreground">{new Date(s.created_at).toLocaleDateString()}</td>
+                  <td className="p-2">
+                    <Badge variant="outline" className="text-[10px]">{s.source || "Footer"}</Badge>
+                  </td>
+                  <td className="p-2"><Badge variant="outline">{s.segment}</Badge></td>
+                  <td className="p-2 text-muted-foreground">{s.created_at ? new Date(s.created_at).toLocaleDateString() : "—"}</td>
+                  <td className="p-2 text-muted-foreground">{s.updated_at ? new Date(s.updated_at).toLocaleDateString() : "—"}</td>
                   <td className="p-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Resend Welcome Email"
+                      onClick={async () => {
+                        try {
+                          await sendTestEmail({ data: { templateKey: "welcome", to: s.email, variables: { user_name: s.name || "Subscriber" } } });
+                          toast.success(`Welcome email resent to ${s.email}`);
+                        } catch (e: any) { toast.error(e?.message); }
+                      }}
+                    >
+                      <Send className="h-3.5 w-3.5 text-primary" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(s)}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" onClick={async () => {
                       if (!confirm(`Delete ${s.email}?`)) return;

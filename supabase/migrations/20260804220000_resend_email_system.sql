@@ -82,10 +82,12 @@ CREATE TABLE IF NOT EXISTS public.newsletter_subscribers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text UNIQUE NOT NULL,
   name text,
-  status text NOT NULL DEFAULT 'subscribed', -- 'subscribed', 'unsubscribed'
+  status text NOT NULL DEFAULT 'subscribed', -- 'subscribed', 'unsubscribed', 'pending'
+  source text NOT NULL DEFAULT 'Footer', -- 'Homepage', 'Footer', 'Popup', 'Landing Page'
   tags text[] NOT NULL DEFAULT '{}',
   segment text NOT NULL DEFAULT 'Newsletter Subscribers',
   created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   last_email_sent_at timestamptz
 );
 

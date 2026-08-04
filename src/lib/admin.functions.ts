@@ -294,26 +294,22 @@ export const submitContactMessage = createServerFn({ method: "POST" })
   });
 
 export const subscribeNewsletter = createServerFn({ method: "POST" })
-  .inputValidator((d: { email: string }) =>
+  .inputValidator((d: { email: string; name?: string; source?: string }) =>
     z.object({
       email: z.string().trim().email("Enter a valid email address").max(255),
+      name: z.string().optional(),
+      source: z.string().optional().default("Footer"),
     }).parse(d),
   )
   .handler(async ({ data }) => {
-    const admin = (await import("@/integrations/supabase/client.server")).supabaseAdmin;
-    const { error } = await admin.from("contact_messages").insert({
-      name: "Newsletter Subscriber",
-      email: data.email,
-      message: "Subscribed to newsletter via website footer form.",
+    const { subscribeNewsletterFn } = await import("./email.functions");
+    return subscribeNewsletterFn({
+      data: {
+        email: data.email,
+        name: data.name,
+        source: data.source || "Footer",
+      },
     });
-    if (error) throw new Error(error.message);
-    const { notifyAdmin } = await import("./email.functions");
-    await notifyAdmin("admin_new_message", {
-      name: "Newsletter Subscriber",
-      email: data.email,
-      message: "Subscribed to newsletter via website footer form.",
-    }).catch(() => {});
-    return { ok: true };
   });
 
 /* ---------------- Settings ---------------- */
