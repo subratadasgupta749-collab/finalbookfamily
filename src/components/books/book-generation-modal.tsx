@@ -262,8 +262,11 @@ export function BookGenerationModal({
               <Button onClick={handleDownloadPdfClick} variant="outline" size="lg" className="rounded-xl px-6">
                 <Download className="mr-2 h-4 w-4" /> Download PDF
               </Button>
+              <Button onClick={startGenerationFlow} variant="outline" size="lg" className="rounded-xl px-6">
+                <RefreshCw className="mr-2 h-4 w-4" /> Regenerate Book
+              </Button>
               <Button onClick={onClose} variant="ghost" size="lg" className="rounded-xl">
-                <RotateCcw className="mr-2 h-4 w-4" /> Create Another Book
+                <RotateCcw className="mr-2 h-4 w-4" /> Close
               </Button>
             </div>
           </div>
