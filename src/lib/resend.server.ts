@@ -64,6 +64,22 @@ export async function getResendSettings(): Promise<{ settings: EmailSettingsRow 
     } catch {}
   }
 
+  // Auto-migrate any legacy domain references in resolved row
+  if (row) {
+    if (row.sender_email?.includes("myfamilybook.com")) {
+      row.sender_email = row.sender_email.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+    }
+    if (row.reply_to_email?.includes("myfamilybook.com")) {
+      row.reply_to_email = row.reply_to_email.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+    }
+    if (row.verified_domain === "myfamilybook.com" || !row.verified_domain) {
+      row.verified_domain = "myfamilyhistorybook.com";
+    }
+    if (row.default_from_address?.includes("myfamilybook.com")) {
+      row.default_from_address = row.default_from_address.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+    }
+  }
+
   let apiKey = "";
 
   if (row?.resend_api_key_encrypted) {
@@ -97,7 +113,7 @@ export async function sendResendEmail(opts: ResendEmailOptions): Promise<{ id: s
     settings?.default_from_address ||
     (settings?.sender_name && settings?.sender_email
       ? `${settings.sender_name} <${settings.sender_email}>`
-      : "My Family Book <noreply@myfamilybook.com>");
+      : "My Family History Book <noreply@myfamilyhistorybook.com>");
 
   const payload: Record<string, unknown> = {
     from,

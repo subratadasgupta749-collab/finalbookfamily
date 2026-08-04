@@ -7,11 +7,11 @@ CREATE TABLE IF NOT EXISTS public.email_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   resend_enabled boolean NOT NULL DEFAULT true,
   resend_api_key_encrypted text,
-  sender_name text NOT NULL DEFAULT 'My Family Book',
-  sender_email text NOT NULL DEFAULT 'noreply@myfamilybook.com',
-  reply_to_email text DEFAULT 'support@myfamilybook.com',
-  verified_domain text DEFAULT 'myfamilybook.com',
-  default_from_address text NOT NULL DEFAULT 'My Family Book <noreply@myfamilybook.com>',
+  sender_name text NOT NULL DEFAULT 'My Family History Book',
+  sender_email text NOT NULL DEFAULT 'noreply@myfamilyhistorybook.com',
+  reply_to_email text DEFAULT 'support@myfamilyhistorybook.com',
+  verified_domain text DEFAULT 'myfamilyhistorybook.com',
+  default_from_address text NOT NULL DEFAULT 'My Family History Book <noreply@myfamilyhistorybook.com>',
   connection_status text NOT NULL DEFAULT 'untested', -- 'ok', 'error', 'untested'
   last_tested_at timestamptz,
   last_test_message text,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.email_settings (
 
 -- Seed single settings row if empty
 INSERT INTO public.email_settings (resend_enabled, sender_name, sender_email, default_from_address)
-SELECT true, 'My Family Book', 'noreply@myfamilybook.com', 'My Family Book <noreply@myfamilybook.com>'
+SELECT true, 'My Family History Book', 'noreply@myfamilyhistorybook.com', 'My Family History Book <noreply@myfamilyhistorybook.com>'
 WHERE NOT EXISTS (SELECT 1 FROM public.email_settings);
 
 -- 2. EMAIL TEMPLATES

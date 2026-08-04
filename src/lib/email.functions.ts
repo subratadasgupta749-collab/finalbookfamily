@@ -100,7 +100,7 @@ export async function sendTemplatedEmail(opts: {
   const vars = {
     site_name: general.site_name ?? "My Family History Book",
     app_url: general.app_url ?? "",
-    support_email: general.support_email ?? "support@myfamilybook.com",
+    support_email: general.support_email ?? "support@myfamilyhistorybook.com",
     ...(opts.variables ?? {}),
   };
 
@@ -148,7 +148,7 @@ export async function sendTemplatedEmail(opts: {
 export async function notifyAdmin(templateKey: string, variables: Record<string, any>) {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let to = "support@myfamilybook.com";
+    let to = "support@myfamilyhistorybook.com";
     try {
       const { data } = await (supabaseAdmin as any)
         .from("app_settings")
@@ -241,14 +241,30 @@ export const getEmailSettings = createServerFn({ method: "GET" })
       } catch {}
     }
 
+    // Auto-migrate any legacy domain references stored in data
+    if (data) {
+      if (data.sender_email?.includes("myfamilybook.com")) {
+        data.sender_email = data.sender_email.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+      }
+      if (data.reply_to_email?.includes("myfamilybook.com")) {
+        data.reply_to_email = data.reply_to_email.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+      }
+      if (data.verified_domain === "myfamilybook.com" || !data.verified_domain) {
+        data.verified_domain = "myfamilyhistorybook.com";
+      }
+      if (data.default_from_address?.includes("myfamilybook.com")) {
+        data.default_from_address = data.default_from_address.replace(/myfamilybook\.com/g, "myfamilyhistorybook.com");
+      }
+    }
+
     if (!data) {
       data = {
         resend_enabled: true,
-        sender_name: "My Family Book",
-        sender_email: "noreply@myfamilybook.com",
-        reply_to_email: "support@myfamilybook.com",
-        verified_domain: "myfamilybook.com",
-        default_from_address: "My Family Book <noreply@myfamilybook.com>",
+        sender_name: "My Family History Book",
+        sender_email: "noreply@myfamilyhistorybook.com",
+        reply_to_email: "support@myfamilyhistorybook.com",
+        verified_domain: "myfamilyhistorybook.com",
+        default_from_address: "My Family History Book <noreply@myfamilyhistorybook.com>",
         enable_transactional: true,
         enable_newsletter: true,
         enable_marketing: true,

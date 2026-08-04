@@ -105,11 +105,11 @@ function ResendSettingsTab() {
   const [f, setF] = useState<any>({
     resend_enabled: true,
     api_key: "",
-    sender_name: "My Family Book",
-    sender_email: "noreply@myfamilybook.com",
-    reply_to_email: "support@myfamilybook.com",
-    verified_domain: "myfamilybook.com",
-    default_from_address: "My Family Book <noreply@myfamilybook.com>",
+    sender_name: "My Family History Book",
+    sender_email: "noreply@myfamilyhistorybook.com",
+    reply_to_email: "support@myfamilyhistorybook.com",
+    verified_domain: "myfamilyhistorybook.com",
+    default_from_address: "My Family History Book <noreply@myfamilyhistorybook.com>",
     enable_transactional: true,
     enable_newsletter: true,
     enable_marketing: true,
@@ -216,23 +216,23 @@ function ResendSettingsTab() {
         </Field>
 
         <Field label="Sender Name">
-          <Input value={f.sender_name ?? ""} onChange={(e) => setF({ ...f, sender_name: e.target.value })} placeholder="My Family Book" />
+          <Input value={f.sender_name ?? ""} onChange={(e) => setF({ ...f, sender_name: e.target.value })} placeholder="My Family History Book" />
         </Field>
 
         <Field label="Sender Email Address">
-          <Input value={f.sender_email ?? ""} onChange={(e) => setF({ ...f, sender_email: e.target.value })} placeholder="noreply@myfamilybook.com" />
+          <Input value={f.sender_email ?? ""} onChange={(e) => setF({ ...f, sender_email: e.target.value })} placeholder="noreply@myfamilyhistorybook.com" />
         </Field>
 
         <Field label="Reply-To Email Address">
-          <Input value={f.reply_to_email ?? ""} onChange={(e) => setF({ ...f, reply_to_email: e.target.value })} placeholder="support@myfamilybook.com" />
+          <Input value={f.reply_to_email ?? ""} onChange={(e) => setF({ ...f, reply_to_email: e.target.value })} placeholder="support@myfamilyhistorybook.com" />
         </Field>
 
         <Field label="Verified Domain">
-          <Input value={f.verified_domain ?? ""} onChange={(e) => setF({ ...f, verified_domain: e.target.value })} placeholder="myfamilybook.com" />
+          <Input value={f.verified_domain ?? ""} onChange={(e) => setF({ ...f, verified_domain: e.target.value })} placeholder="myfamilyhistorybook.com" />
         </Field>
 
         <Field label="Default From Header Address">
-          <Input value={f.default_from_address ?? ""} onChange={(e) => setF({ ...f, default_from_address: e.target.value })} placeholder="My Family Book <noreply@myfamilybook.com>" />
+          <Input value={f.default_from_address ?? ""} onChange={(e) => setF({ ...f, default_from_address: e.target.value })} placeholder="My Family History Book <noreply@myfamilyhistorybook.com>" />
         </Field>
       </div>
 
