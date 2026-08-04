@@ -252,7 +252,7 @@ function ProviderCard({
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={f.provider_type === "gemini" ? "AIzaSy…" : "sk-…"}
+            placeholder={f.provider_type === "gemini" ? "AIzaSy… or AQ.…" : "sk-…"}
             autoComplete="off"
           />
         </Field>

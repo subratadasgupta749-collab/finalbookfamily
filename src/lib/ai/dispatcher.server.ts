@@ -307,7 +307,7 @@ async function callGemini(
   // Format Check Safeguard
   if (sanitizedKey.startsWith("sk-")) {
     throw new Error(
-      `[API Key Format Mismatch] Key starts with 'sk-' (OpenAI key format), but you are requesting Google Gemini! Please enter a valid Google AI Studio key (starts with 'AIzaSy').`,
+      `[API Key Format Mismatch] Key starts with 'sk-' (OpenAI key format), but you are requesting Google Gemini! Please enter a valid Google AI Studio key (starts with 'AIzaSy' or 'AQ.').`,
     );
   }
 
@@ -349,6 +349,16 @@ async function callGemini(
   const sys = opts.system ?? row.system_prompt;
   if (sys) body.systemInstruction = { parts: [{ text: sys }] };
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-goog-api-key": sanitizedKey, // Pass in header for Google API Gateway compatibility
+  };
+
+  // Support for AQ. format keys (Google Cloud / Vertex AI / Firebase tokens)
+  if (sanitizedKey.startsWith("AQ.")) {
+    headers["Authorization"] = `Bearer ${sanitizedKey}`;
+  }
+
   const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "Present";
   console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Key: ${maskedKey}`);
 
@@ -358,10 +368,7 @@ async function callGemini(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": sanitizedKey, // Dual auth: Query Param + Header for 100% Google Gateway compatibility
-      },
+      headers,
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
