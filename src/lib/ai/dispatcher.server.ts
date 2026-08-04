@@ -323,7 +323,12 @@ async function callGemini(
     cleanModel = "gemini-1.5-flash"; // Auto-correct legacy model name
   }
 
-  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
+  const isOAuthToken = sanitizedKey.startsWith("AQ.") || sanitizedKey.startsWith("ya29.");
+
+  // For OAuth2 tokens (AQ...), DO NOT pass ?key= parameter in URL because Google API Gateway rejects ?key with OAuth tokens
+  const url = isOAuthToken
+    ? `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`
+    : `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
 
   const body: Record<string, unknown> = {
     contents: [
@@ -351,16 +356,16 @@ async function callGemini(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "x-goog-api-key": sanitizedKey, // Pass in header for Google API Gateway compatibility
   };
 
-  // Support for AQ. format keys (Google Cloud / Vertex AI / Firebase tokens)
-  if (sanitizedKey.startsWith("AQ.")) {
+  if (isOAuthToken) {
     headers["Authorization"] = `Bearer ${sanitizedKey}`;
+  } else {
+    headers["x-goog-api-key"] = sanitizedKey;
   }
 
   const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "Present";
-  console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Key: ${maskedKey}`);
+  console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Auth Type: ${isOAuthToken ? "OAuth2 Bearer Token" : "API Key"} | Key: ${maskedKey}`);
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), row.timeout_ms || 60000);
