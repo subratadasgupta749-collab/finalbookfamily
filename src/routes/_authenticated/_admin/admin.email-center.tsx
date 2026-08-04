@@ -61,12 +61,34 @@ export const Route = createFileRoute("/_authenticated/_admin/admin/email-center"
     ],
   }),
   component: EmailCenterPage,
+  errorComponent: ({ error, reset }: { error: Error; reset: () => void }) => {
+    console.error("[EmailCenter Error Boundary Caught Exception]:", error);
+    return (
+      <div className="mx-auto max-w-4xl p-6 space-y-4">
+        <Card className="p-6 border-destructive/50 bg-destructive/5 space-y-3">
+          <div className="flex items-center gap-2 text-destructive font-semibold text-base">
+            <AlertTriangle className="h-5 w-5" />
+            Email Center Page Error
+          </div>
+          <p className="text-sm text-muted-foreground">{error?.message ?? "An error occurred in Email Center."}</p>
+          <div className="flex items-center gap-3 pt-2">
+            <Button size="sm" onClick={() => reset()}><RefreshCw className="mr-2 h-4 w-4" /> Retry Page</Button>
+            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>Reload Application</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  },
 });
 
 const SEGMENTS = ["All Users", "Paid Users", "Free Users", "Trial Users", "Newsletter Subscribers", "Support", "Custom Segments"];
 
 function EmailCenterPage() {
   const [activeTab, setActiveTab] = useState("settings");
+
+  useEffect(() => {
+    console.log("[EmailCenter] Component Loaded");
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -298,14 +320,26 @@ function ResendSettingsTab() {
 function TemplatesTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [testing, setTesting] = useState<any | null>(null);
 
   const refresh = async () => {
     setLoading(true);
-    try { setRows(await listTemplates() as any[]); }
-    catch (e: any) { toast.error(e?.message ?? "Failed to load templates"); }
-    finally { setLoading(false); }
+    setErrorMsg(null);
+    console.log("[EmailCenter:TemplatesTab] API Started: Fetching templates");
+    try {
+      const res = await listTemplates();
+      console.log("[EmailCenter:TemplatesTab] API Success:", res);
+      setRows(Array.isArray(res) ? res : []);
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      console.error("[EmailCenter:TemplatesTab] API Failed:", msg, e);
+      setErrorMsg(msg);
+      toast.error(msg ?? "Failed to load templates");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { refresh(); }, []);
@@ -317,25 +351,50 @@ function TemplatesTab() {
           <h2 className="text-lg font-semibold">Email Templates</h2>
           <p className="text-xs text-muted-foreground">Manage dynamic transactional and marketing templates with double-curly variable interpolation.</p>
         </div>
-        <Button onClick={() => setEditing({ key: "", name: "", category: "transactional", subject: "", html_body: "", variables: ["user_name", "app_url"], enabled: true })}>
-          <Plus className="mr-2 h-4 w-4" /> New Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+          <Button onClick={() => setEditing({ key: "", name: "", category: "transactional", subject: "", html_body: "", variables: ["user_name", "app_url"], enabled: true })}>
+            <Plus className="mr-2 h-4 w-4" /> New Template
+          </Button>
+        </div>
       </div>
 
-      {loading ? <div className="text-sm text-muted-foreground">Loading templates…</div> : (
+      {errorMsg && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5 flex items-center justify-between gap-4">
+          <div className="text-sm text-destructive font-medium">Error loading templates: {errorMsg}</div>
+          <Button size="sm" variant="outline" onClick={refresh}><RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry</Button>
+        </Card>
+      )}
+
+      {loading ? (
+        <Card className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center justify-center gap-2">
+          <RefreshCw className="h-5 w-5 animate-spin text-primary" /> Loading templates…
+        </Card>
+      ) : !Array.isArray(rows) || rows.length === 0 ? (
+        <Card className="p-8 text-center space-y-3">
+          <Mail className="h-10 w-10 text-muted-foreground mx-auto" />
+          <div className="font-medium text-base">No templates found</div>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">Create your first transactional or marketing email template.</p>
+          <Button size="sm" onClick={() => setEditing({ key: "", name: "", category: "transactional", subject: "", html_body: "", variables: ["user_name", "app_url"], enabled: true })}>
+            <Plus className="mr-1.5 h-4 w-4" /> Create Your First Template
+          </Button>
+        </Card>
+      ) : (
         <div className="grid gap-3">
           {rows.map((t) => (
-            <Card key={t.id} className="p-4 flex flex-wrap items-start justify-between gap-4">
+            <Card key={t.id || t.key} className="p-4 flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{t.name}</span>
-                  <Badge variant="outline" className="font-mono text-xs">{t.key}</Badge>
-                  <Badge variant="secondary">{t.category}</Badge>
-                  {!t.enabled && <Badge variant="destructive">Disabled</Badge>}
+                  <Mail className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-medium">{t?.name || t?.key || "Untitled"}</span>
+                  <Badge variant="outline" className="font-mono text-xs">{t?.key}</Badge>
+                  {t?.category && <Badge variant="secondary">{t.category}</Badge>}
+                  {t?.enabled === false && <Badge variant="destructive">Disabled</Badge>}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 truncate">{t.description || t.subject}</p>
-                {t.variables?.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1 truncate">{t?.description || t?.subject}</p>
+                {Array.isArray(t?.variables) && t.variables.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {t.variables.map((v: string) => (
                       <code key={v} className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{`{{${v}}}`}</code>
@@ -347,9 +406,12 @@ function TemplatesTab() {
                 <Button size="sm" variant="outline" onClick={() => setTesting(t)}><Send className="mr-1 h-3 w-3" /> Test</Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditing(t)}><Pencil className="h-4 w-4" /></Button>
                 <Button size="sm" variant="ghost" onClick={async () => {
-                  if (!confirm(`Delete template "${t.name}"?`)) return;
-                  try { await deleteTemplate({ data: { id: t.id } }); toast.success("Deleted"); refresh(); }
-                  catch (e: any) { toast.error(e?.message); }
+                  if (!confirm(`Delete template "${t?.name || t?.key}"?`)) return;
+                  try {
+                    if (t.id) await deleteTemplate({ data: { id: t.id } });
+                    toast.success("Deleted");
+                    refresh();
+                  } catch (e: any) { toast.error(e?.message); }
                 }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
             </Card>
