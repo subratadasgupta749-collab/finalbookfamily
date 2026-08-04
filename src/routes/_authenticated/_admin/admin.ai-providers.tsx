@@ -247,8 +247,14 @@ function ProviderCard({
         </Field>
         <Field label="Base URL"><Input value={f.base_url ?? ""} onChange={(e) => setF({ ...f, base_url: e.target.value })} /></Field>
         <Field label="Default model"><Input value={f.default_model ?? ""} onChange={(e) => setF({ ...f, default_model: e.target.value })} /></Field>
-        <Field label={row.has_key ? "Replace API key (leave blank to keep)" : "API key"}>
-          <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-…" autoComplete="off" />
+        <Field label={row.has_key ? `Replace API key (${row.key_source ?? "saved"})` : "API key"}>
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={f.provider_type === "gemini" ? "AIzaSy…" : "sk-…"}
+            autoComplete="off"
+          />
         </Field>
         <Field label="Priority (lower = tried first)"><Input type="number" value={f.priority ?? 100} onChange={(e) => setF({ ...f, priority: e.target.value })} /></Field>
         <Field label="Max tokens"><Input type="number" value={f.max_tokens ?? ""} onChange={(e) => setF({ ...f, max_tokens: e.target.value })} /></Field>

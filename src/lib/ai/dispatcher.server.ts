@@ -162,7 +162,8 @@ async function logCall(entry: {
 function resolveApiKey(row: ProviderRow): { key: string; source: string } {
   const decrypted = decryptKey(row);
   if (decrypted && decrypted.trim().length > 0) {
-    return { key: decrypted.trim(), source: "Database (Encrypted)" };
+    const sanitized = decrypted.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+    return { key: sanitized, source: "Database (Encrypted)" };
   }
 
   // Fallback to environment variables
@@ -172,28 +173,32 @@ function resolveApiKey(row: ProviderRow): { key: string; source: string } {
       process.env.GOOGLE_AI_STUDIO_API_KEY ||
       process.env.GOOGLE_API_KEY;
     if (envKey && envKey.trim().length > 0) {
-      return { key: envKey.trim(), source: "Environment Variable (GEMINI_API_KEY)" };
+      const sanitized = envKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+      return { key: sanitized, source: "Environment Variable (GEMINI_API_KEY)" };
     }
   }
 
   if (row.provider_type === "openai_compatible" || row.slug.includes("openai")) {
     const envKey = process.env.OPENAI_API_KEY;
     if (envKey && envKey.trim().length > 0) {
-      return { key: envKey.trim(), source: "Environment Variable (OPENAI_API_KEY)" };
+      const sanitized = envKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+      return { key: sanitized, source: "Environment Variable (OPENAI_API_KEY)" };
     }
   }
 
   if (row.provider_type === "anthropic" || row.slug.includes("anthropic")) {
     const envKey = process.env.ANTHROPIC_API_KEY;
     if (envKey && envKey.trim().length > 0) {
-      return { key: envKey.trim(), source: "Environment Variable (ANTHROPIC_API_KEY)" };
+      const sanitized = envKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+      return { key: sanitized, source: "Environment Variable (ANTHROPIC_API_KEY)" };
     }
   }
 
   if (row.provider_type === "lovable") {
     const envKey = process.env.LOVABLE_API_KEY;
     if (envKey && envKey.trim().length > 0) {
-      return { key: envKey.trim(), source: "Environment Variable (LOVABLE_API_KEY)" };
+      const sanitized = envKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+      return { key: sanitized, source: "Environment Variable (LOVABLE_API_KEY)" };
     }
   }
 
@@ -203,7 +208,8 @@ function resolveApiKey(row: ProviderRow): { key: string; source: string } {
     process.env.GOOGLE_API_KEY ||
     process.env.OPENAI_API_KEY;
   if (genericKey && genericKey.trim().length > 0) {
-    return { key: genericKey.trim(), source: "Environment Variable (Generic)" };
+    const sanitized = genericKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+    return { key: sanitized, source: "Environment Variable (Generic)" };
   }
 
   return { key: "", source: "None" };
@@ -218,9 +224,11 @@ async function callOpenAiCompatible(
   opts: AiCallOptions,
   overrides?: { baseUrl?: string; authHeader?: "bearer" | "lovable" },
 ): Promise<{ text: string; tokensIn: number; tokensOut: number }> {
+  const sanitizedKey = apiKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
   const rawBase = overrides?.baseUrl ?? row.base_url ?? "https://api.openai.com/v1";
   const base = rawBase.replace(/\/+$/, "");
   const url = `${base}/chat/completions`;
+
   const body: Record<string, unknown> = {
     model,
     messages: [
@@ -241,10 +249,10 @@ async function callOpenAiCompatible(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const isLovableHeader = overrides?.authHeader === "lovable";
   if (isLovableHeader) {
-    headers["Lovable-API-Key"] = apiKey;
+    headers["Lovable-API-Key"] = sanitizedKey;
     headers["X-Lovable-AIG-SDK"] = "custom";
   } else {
-    headers["Authorization"] = `Bearer ${apiKey}`;
+    headers["Authorization"] = `Bearer ${sanitizedKey}`;
   }
 
   const ctrl = new AbortController();
@@ -294,7 +302,16 @@ async function callGemini(
   model: string,
   opts: AiCallOptions,
 ) {
-  // Normalize Base URL for Google AI Studio
+  const sanitizedKey = apiKey.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
+
+  // Format Check Safeguard
+  if (sanitizedKey.startsWith("sk-")) {
+    throw new Error(
+      `[API Key Format Mismatch] Key starts with 'sk-' (OpenAI key format), but you are requesting Google Gemini! Please enter a valid Google AI Studio key (starts with 'AIzaSy').`,
+    );
+  }
+
+  // Base URL for Google AI Studio
   const rawBase = row.base_url || "https://generativelanguage.googleapis.com";
   const base = rawBase
     .replace(/\/+(v1beta|v1|models)*\/*$/, "")
@@ -303,13 +320,17 @@ async function callGemini(
   // Clean model name (strip "models/" prefix if present)
   let cleanModel = (model || row.default_model || "gemini-1.5-flash").replace(/^models\//, "");
   if (cleanModel === "gemini-2.5-flash") {
-    cleanModel = "gemini-1.5-flash"; // Fix legacy invalid default model name
+    cleanModel = "gemini-1.5-flash"; // Auto-correct legacy model name
   }
 
-  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(sanitizedKey)}`;
 
   const body: Record<string, unknown> = {
-    contents: [{ role: "user", parts: [{ text: opts.user }] }],
+    contents: [
+      {
+        parts: [{ text: opts.user }],
+      },
+    ],
     generationConfig: {
       ...(opts.temperature != null
         ? { temperature: opts.temperature }
@@ -328,7 +349,7 @@ async function callGemini(
   const sys = opts.system ?? row.system_prompt;
   if (sys) body.systemInstruction = { parts: [{ text: sys }] };
 
-  const maskedKey = apiKey.length > 8 ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : "Present";
+  const maskedKey = sanitizedKey.length > 8 ? `${sanitizedKey.slice(0, 6)}...${sanitizedKey.slice(-4)}` : "Present";
   console.log(`[AI Audit Call] Provider: Google Gemini | Model: ${cleanModel} | Base: ${base} | Key: ${maskedKey}`);
 
   const ctrl = new AbortController();
@@ -337,7 +358,10 @@ async function callGemini(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": sanitizedKey, // Dual auth: Query Param + Header for 100% Google Gateway compatibility
+      },
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
@@ -354,7 +378,7 @@ async function callGemini(
 Provider: ${row.name} (${row.slug}) [Type: gemini]
 Base URL: ${base}
 Model: ${cleanModel}
-Auth Status: Present (Key: ${maskedKey} [Length: ${apiKey.length}])
+Auth Status: Key Present (${maskedKey} [Length: ${sanitizedKey.length}])
 HTTP Status: ${res.status} ${res.statusText}
 Google Error Response: ${parsedError}`;
 

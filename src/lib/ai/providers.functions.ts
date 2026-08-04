@@ -77,7 +77,10 @@ export const updateProvider = createServerFn({ method: "POST" })
     const { id, api_key, ...rest } = data;
     const patch: Record<string, unknown> = { ...rest };
     if (api_key !== undefined) {
-      patch.api_key_encrypted = api_key ? encryptJson(api_key) : null;
+      const cleanKey = api_key
+        ? api_key.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "")
+        : null;
+      patch.api_key_encrypted = cleanKey ? encryptJson(cleanKey) : null;
     }
     const { error } = await supabaseAdmin.from("ai_providers").update(patch as any).eq("id", id);
     if (error) throw new Error(error.message);
