@@ -159,7 +159,7 @@ async function logCall(entry: {
   } catch { return null; }
 }
 
-function resolveApiKey(row: ProviderRow): { key: string; source: string } {
+export function resolveApiKey(row: ProviderRow): { key: string; source: string } {
   const decrypted = decryptKey(row);
   if (decrypted && decrypted.trim().length > 0) {
     const sanitized = decrypted.trim().replace(/^["']|["']$/g, "").replace(/[\s\r\n]+/g, "");
