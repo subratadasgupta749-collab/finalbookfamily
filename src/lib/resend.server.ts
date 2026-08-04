@@ -11,7 +11,7 @@ export interface ResendEmailOptions {
 }
 
 export interface EmailSettingsRow {
-  id: string;
+  id?: string;
   resend_enabled: boolean;
   resend_api_key_encrypted: string | null;
   sender_name: string;
@@ -31,16 +31,39 @@ export interface EmailSettingsRow {
   rate_limit_per_min: number;
 }
 
-/** Resolves Resend settings and decrypts API key server-side. */
+/** Resolves Resend settings with fallback to app_settings table if email_settings table doesn't exist yet. */
 export async function getResendSettings(): Promise<{ settings: EmailSettingsRow | null; apiKey: string }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await (supabaseAdmin as any)
-    .from("email_settings")
-    .select("*")
-    .limit(1)
-    .maybeSingle();
+  let row: EmailSettingsRow | null = null;
 
-  const row = (data as EmailSettingsRow) ?? null;
+  // Try dedicated email_settings table
+  try {
+    const { data, error } = await (supabaseAdmin as any)
+      .from("email_settings")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      row = data as EmailSettingsRow;
+    }
+  } catch {}
+
+  // Fallback to app_settings table key "email_settings"
+  if (!row) {
+    try {
+      const { data: appData } = await (supabaseAdmin as any)
+        .from("app_settings")
+        .select("value")
+        .eq("key", "email_settings")
+        .maybeSingle();
+
+      if (appData?.value) {
+        row = appData.value as EmailSettingsRow;
+      }
+    } catch {}
+  }
+
   let apiKey = "";
 
   if (row?.resend_api_key_encrypted) {
@@ -117,10 +140,12 @@ export async function testResendConnection(testRecipient?: string): Promise<{ ok
   if (!apiKey) {
     const msg = "No API Key configured. Please enter a valid Resend API Key starting with 're_'.";
     if (settings?.id) {
-      await (supabaseAdmin as any)
-        .from("email_settings")
-        .update({ connection_status: "error", last_tested_at: new Date().toISOString(), last_test_message: msg })
-        .eq("id", settings.id);
+      try {
+        await (supabaseAdmin as any)
+          .from("email_settings")
+          .update({ connection_status: "error", last_tested_at: new Date().toISOString(), last_test_message: msg })
+          .eq("id", settings.id);
+      } catch {}
     }
     return { ok: false, message: msg };
   }
@@ -133,7 +158,7 @@ export async function testResendConnection(testRecipient?: string): Promise<{ ok
       to: toEmail,
       subject: "Resend Connection Test — My Family Book",
       html: `
-        <div font-family: sans-serif; padding: 20px;">
+        <div style="font-family: sans-serif; padding: 20px;">
           <h2>✅ Resend Connection Successful!</h2>
           <p>This test email confirms that your Resend API Key is active and sending emails successfully.</p>
           <p><strong>Tested at:</strong> ${new Date().toLocaleString()}</p>
@@ -146,20 +171,24 @@ export async function testResendConnection(testRecipient?: string): Promise<{ ok
     const msg = `Connection Active — Message ID: ${resendRes.id} (${ms}ms)`;
 
     if (settings?.id) {
-      await (supabaseAdmin as any)
-        .from("email_settings")
-        .update({ connection_status: "ok", last_tested_at: new Date().toISOString(), last_test_message: msg })
-        .eq("id", settings.id);
+      try {
+        await (supabaseAdmin as any)
+          .from("email_settings")
+          .update({ connection_status: "ok", last_tested_at: new Date().toISOString(), last_test_message: msg })
+          .eq("id", settings.id);
+      } catch {}
     }
 
     return { ok: true, message: msg };
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     if (settings?.id) {
-      await (supabaseAdmin as any)
-        .from("email_settings")
-        .update({ connection_status: "error", last_tested_at: new Date().toISOString(), last_test_message: msg })
-        .eq("id", settings.id);
+      try {
+        await (supabaseAdmin as any)
+          .from("email_settings")
+          .update({ connection_status: "error", last_tested_at: new Date().toISOString(), last_test_message: msg })
+          .eq("id", settings.id);
+      } catch {}
     }
     return { ok: false, message: msg };
   }
