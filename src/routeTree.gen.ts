@@ -55,6 +55,7 @@ import { Route as AuthenticatedAdminAdminMessagesRouteImport } from './routes/_a
 import { Route as AuthenticatedAdminAdminLegalRouteImport } from './routes/_authenticated/_admin/admin.legal'
 import { Route as AuthenticatedAdminAdminEmailTemplatesRouteImport } from './routes/_authenticated/_admin/admin.email-templates'
 import { Route as AuthenticatedAdminAdminEmailLogsRouteImport } from './routes/_authenticated/_admin/admin.email-logs'
+import { Route as AuthenticatedAdminAdminEmailCenterRouteImport } from './routes/_authenticated/_admin/admin.email-center'
 import { Route as AuthenticatedAdminAdminCouponsRouteImport } from './routes/_authenticated/_admin/admin.coupons'
 import { Route as AuthenticatedAdminAdminCacheRouteImport } from './routes/_authenticated/_admin/admin.cache'
 import { Route as AuthenticatedAdminAdminBooksRouteImport } from './routes/_authenticated/_admin/admin.books'
@@ -324,6 +325,12 @@ const AuthenticatedAdminAdminEmailTemplatesRoute =
     path: '/admin/email-templates',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminEmailCenterRoute =
+  AuthenticatedAdminAdminEmailCenterRouteImport.update({
+    id: '/admin/email-center',
+    path: '/admin/email-center',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminEmailLogsRoute =
   AuthenticatedAdminAdminEmailLogsRouteImport.update({
     id: '/admin/email-logs',
@@ -520,6 +527,7 @@ export interface FileRoutesByFullPath {
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
   '/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
+  '/admin/email-center': typeof AuthenticatedAdminAdminEmailCenterRoute
   '/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
   '/admin/messages': typeof AuthenticatedAdminAdminMessagesRoute
   '/admin/orders': typeof AuthenticatedAdminAdminOrdersRoute
@@ -1239,6 +1247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminEmailTemplatesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/email-center': {
+      id: '/_authenticated/_admin/admin/email-center'
+      path: '/admin/email-center'
+      fullPath: '/admin/email-center'
+      preLoaderRoute: typeof AuthenticatedAdminAdminEmailCenterRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/email-logs': {
       id: '/_authenticated/_admin/admin/email-logs'
       path: '/admin/email-logs'
@@ -1473,6 +1488,8 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminEmailLogsRoute: AuthenticatedAdminAdminEmailLogsRoute,
   AuthenticatedAdminAdminEmailTemplatesRoute:
     AuthenticatedAdminAdminEmailTemplatesRoute,
+  AuthenticatedAdminAdminEmailCenterRoute:
+    AuthenticatedAdminAdminEmailCenterRoute,
   AuthenticatedAdminAdminLegalRoute: AuthenticatedAdminAdminLegalRoute,
   AuthenticatedAdminAdminMessagesRoute: AuthenticatedAdminAdminMessagesRoute,
   AuthenticatedAdminAdminOrdersRoute: AuthenticatedAdminAdminOrdersRoute,
