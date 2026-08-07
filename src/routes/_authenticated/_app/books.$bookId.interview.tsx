@@ -316,6 +316,15 @@ function InterviewPage() {
     return Math.max(currentTopic.qa.length, state?.maxPerTopic ?? currentTopic.qa.length);
   }, [currentTopic, state?.maxPerTopic]);
 
+  // Dynamic check if topic meets completion criteria based on active drafts
+  const canCompleteTopic = useMemo(() => {
+    if (!currentTopic) return false;
+    const answeredCount = currentTopic.qa.filter(
+      (q) => (drafts[q.id] ?? "").trim().length > 0,
+    ).length;
+    return answeredCount >= (state?.minPerTopic ?? 3);
+  }, [currentTopic, drafts, state?.minPerTopic]);
+
   // Questions completed after finishing current step
   const completedAfterCurrentStep = useMemo(() => {
     return Math.min((currentStep + 1) * questionsPerStep, targetTopicQuestions);
@@ -392,7 +401,7 @@ function InterviewPage() {
     }
 
     // Topic is complete -> mark topic complete and advance to next incomplete topic
-    if (currentTopic.can_complete && currentTopic.status !== "completed") {
+    if (canCompleteTopic && currentTopic.status !== "completed") {
       await topicStatusMutation.mutateAsync({
         topic: currentTopic.topic,
         status: "completed",
@@ -707,7 +716,7 @@ function InterviewPage() {
 
                   {/* Navigation Controls */}
                   <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
-                    {currentTopic.can_complete && currentTopic.status !== "completed" && (
+                    {canCompleteTopic && currentTopic.status !== "completed" && (
                       <Button
                         variant="outline"
                         onClick={async () => {
