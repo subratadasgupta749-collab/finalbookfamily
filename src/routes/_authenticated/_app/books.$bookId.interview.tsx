@@ -185,85 +185,80 @@ function InterviewPage() {
     [bookId],
   );
 
-  // Core Auto-Save Engine (Debounced 2.5 seconds after user stops typing)
-  const isSavingRef = useRef(false);
+  const questionsPerStep = state?.questionsPerStep ?? 3;
 
-  const performSave = useCallback(
-    async (qaId: string, answer: string) => {
-      if (isSavingRef.current) return;
-      console.log(`[Interview] Auto Save Started for ${qaId}`);
-      setSavingStatus("saving");
-      isSavingRef.current = true;
+  // Batch Auto-Save Engine for Current Step
+  const flushSaveCurrentStep = useCallback(async () => {
+    if (!currentTopic) return;
+    const stepQas = currentTopic.qa.slice(
+      currentStep * questionsPerStep,
+      (currentStep + 1) * questionsPerStep,
+    );
 
-      try {
-        await saveFn({ data: { qaId, bookId, answer } });
-        savedAnswersRef.current[qaId] = answer;
+    const changed = stepQas.filter((q) => {
+      const val = drafts[q.id] ?? "";
+      return val !== (savedAnswersRef.current[q.id] ?? "");
+    });
 
-        // Clear local backup once successfully persisted to database
-        try {
-          localStorage.removeItem(`interview_draft_${bookId}_${qaId}`);
-        } catch {}
+    if (changed.length === 0) return;
 
-        // Optimistically update TanStack Query cache in memory WITHOUT triggering refetch that resets inputs!
-        queryClient.setQueryData(["interview", bookId], (oldData: any) => {
-          if (!oldData) return oldData;
-          return {
-            ...oldData,
-            topics: oldData.topics.map((t: any) => ({
-              ...t,
-              qa: t.qa.map((q: any) => (q.id === qaId ? { ...q, answer } : q)),
-            })),
-          };
-        });
+    setSavingStatus("saving");
+    try {
+      await Promise.all(
+        changed.map(async (q) => {
+          const val = drafts[q.id] ?? "";
+          await saveFn({ data: { qaId: q.id, bookId, answer: val } });
+          savedAnswersRef.current[q.id] = val;
+          try {
+            localStorage.removeItem(`interview_draft_${bookId}_${q.id}`);
+          } catch {}
+        }),
+      );
 
-        console.log(`[Interview] Auto Save Completed & Database Saved for ${qaId}`);
-        setSavingStatus("saved");
-        setLastSavedTime(format(new Date(), "h:mm a"));
-      } catch (err: any) {
-        console.error(`[Interview] Auto Save Failed for ${qaId}:`, err);
-        setSavingStatus("failed");
-        toast.error("Failed to save answer. Will retry automatically.");
-      } finally {
-        isSavingRef.current = false;
-      }
-    },
-    [bookId, saveFn, queryClient],
-  );
+      queryClient.setQueryData(["interview", bookId], (oldData: any) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          topics: oldData.topics.map((t: any) => ({
+            ...t,
+            qa: t.qa.map((q: any) => {
+              const updatedVal = drafts[q.id];
+              return updatedVal !== undefined ? { ...q, answer: updatedVal } : q;
+            }),
+          })),
+        };
+      });
 
-  // Debounced auto-save effect (2.5s timeout)
+      setSavingStatus("saved");
+      setLastSavedTime(format(new Date(), "h:mm a"));
+    } catch (err: any) {
+      console.error("[Interview] Auto Save Failed:", err);
+      setSavingStatus("failed");
+      toast.error("Failed to save answer. Will retry automatically.");
+    }
+  }, [currentTopic, currentStep, questionsPerStep, drafts, bookId, saveFn, queryClient]);
+
+  // Fast Debounced auto-save effect (600ms timeout after user pauses typing)
   useEffect(() => {
     if (paused || !currentTopic) return;
 
     const timeout = setTimeout(() => {
-      for (const q of currentTopic.qa) {
-        const currentVal = drafts[q.id] ?? "";
-        const savedVal = savedAnswersRef.current[q.id] ?? "";
-        if (currentVal !== savedVal) {
-          performSave(q.id, currentVal);
-        }
-      }
-    }, 2500);
+      flushSaveCurrentStep();
+    }, 600);
 
     return () => clearTimeout(timeout);
-  }, [drafts, currentTopic, paused, performSave]);
+  }, [drafts, currentTopic, paused, flushSaveCurrentStep]);
 
   // Window Online Event Listener for Automatic Offline Recovery
   useEffect(() => {
     const handleOnline = () => {
       console.log("[Interview] Network reconnected - retrying pending auto-saves");
-      if (!currentTopic) return;
-      for (const q of currentTopic.qa) {
-        const currentVal = drafts[q.id] ?? "";
-        const savedVal = savedAnswersRef.current[q.id] ?? "";
-        if (currentVal !== savedVal) {
-          performSave(q.id, currentVal);
-        }
-      }
+      flushSaveCurrentStep();
     };
 
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  }, [drafts, currentTopic, performSave]);
+  }, [flushSaveCurrentStep]);
 
   const generateMutation = useMutation({
     mutationFn: (topic: string) => generateFn({ data: { bookId, topic } }),
@@ -282,22 +277,6 @@ function InterviewPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  const questionsPerStep = state?.questionsPerStep ?? 3;
-
-  const flushSaveCurrentStep = async () => {
-    if (!currentTopic) return;
-    const stepQas = currentTopic.qa.slice(
-      currentStep * questionsPerStep,
-      (currentStep + 1) * questionsPerStep,
-    );
-    for (const q of stepQas) {
-      const currentVal = drafts[q.id] ?? "";
-      if (currentVal !== (savedAnswersRef.current[q.id] ?? "")) {
-        await performSave(q.id, currentVal);
-      }
-    }
-  };
 
   // Helper calculations for questions step pagination
   const totalQuestionsInTopic = currentTopic?.qa.length || 0;
@@ -698,6 +677,7 @@ function InterviewPage() {
                             <Textarea
                               value={val}
                               onChange={(e) => handleTextareaChange(qa.id, e.target.value)}
+                              onBlur={() => flushSaveCurrentStep()}
                               placeholder={`Answer Question ${absoluteIndex} in as much detail as you'd like…`}
                               rows={4}
                               className={validationError && isMissing ? "border-destructive" : ""}
