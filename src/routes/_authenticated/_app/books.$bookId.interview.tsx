@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
-  ChevronLeft,
   ChevronRight,
   CheckCircle2,
   Circle,
@@ -311,6 +310,27 @@ function InterviewPage() {
     );
   }, [currentTopic, currentStep, questionsPerStep]);
 
+  // Total target questions in section
+  const targetTopicQuestions = useMemo(() => {
+    if (!currentTopic) return 0;
+    return Math.max(currentTopic.qa.length, state?.maxPerTopic ?? currentTopic.qa.length);
+  }, [currentTopic, state?.maxPerTopic]);
+
+  // Questions completed after finishing current step
+  const completedAfterCurrentStep = useMemo(() => {
+    return Math.min((currentStep + 1) * questionsPerStep, targetTopicQuestions);
+  }, [currentStep, questionsPerStep, targetTopicQuestions]);
+
+  // Remaining questions in section after completing current step
+  const remainingQuestions = useMemo(() => {
+    return Math.max(0, targetTopicQuestions - completedAfterCurrentStep);
+  }, [targetTopicQuestions, completedAfterCurrentStep]);
+
+  // Number of questions to be presented in the next batch
+  const nextBatchCount = useMemo(() => {
+    return Math.min(questionsPerStep, remainingQuestions);
+  }, [questionsPerStep, remainingQuestions]);
+
   // Calculate estimated remaining time (approx 2 mins per unanswered question)
   const remainingUnansweredCount = useMemo(() => {
     if (!state) return 0;
@@ -334,17 +354,6 @@ function InterviewPage() {
       setCurrentStep(parseInt(savedStep, 10) || 0);
     } else {
       setCurrentStep(0);
-    }
-  };
-
-  // Step Navigation - Previous
-  const handlePrevStep = async () => {
-    await flushSaveCurrentStep();
-    setValidationError(null);
-    if (currentStep > 0) {
-      const nextStep = currentStep - 1;
-      setCurrentStep(nextStep);
-      localStorage.setItem(`interview_step_${bookId}_${activeTopic}`, nextStep.toString());
     }
   };
 
@@ -697,53 +706,45 @@ function InterviewPage() {
                   </div>
 
                   {/* Navigation Controls */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={handlePrevStep}
-                      disabled={currentStep === 0}
-                    >
-                      <ChevronLeft className="mr-1 h-4 w-4" /> Previous Step
-                    </Button>
-
-                    <div className="flex items-center gap-2">
-                      {currentTopic.can_complete && currentTopic.status !== "completed" && (
-                        <Button
-                          variant="outline"
-                          onClick={async () => {
-                            await flushSaveCurrentStep();
-                            await topicStatusMutation.mutateAsync({
-                              topic: currentTopic.topic,
-                              status: "completed",
-                            });
-                            await goToNextIncompleteTopic();
-                          }}
-                          disabled={topicStatusMutation.isPending}
-                        >
-                          <CheckCircle2 className="mr-1 h-4 w-4" /> Mark Topic Complete
-                        </Button>
-                      )}
-
-                      <Button onClick={handleNextStep} disabled={generateMutation.isPending}>
-                        {generateMutation.isPending ? (
-                          <>
-                            <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating…
-                          </>
-                        ) : currentStep < totalStepsInTopic - 1 ? (
-                          <>
-                            Next Step <ChevronRight className="ml-1 h-4 w-4" />
-                          </>
-                        ) : currentTopic.qa.length < state.maxPerTopic ? (
-                          <>
-                            Next 3 Questions <Sparkles className="ml-1 h-4 w-4" />
-                          </>
-                        ) : (
-                          <>
-                            Next Topic <ChevronRight className="ml-1 h-4 w-4" />
-                          </>
-                        )}
+                  <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
+                    {currentTopic.can_complete && currentTopic.status !== "completed" && (
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await flushSaveCurrentStep();
+                          await topicStatusMutation.mutateAsync({
+                            topic: currentTopic.topic,
+                            status: "completed",
+                          });
+                          await goToNextIncompleteTopic();
+                        }}
+                        disabled={topicStatusMutation.isPending}
+                      >
+                        <CheckCircle2 className="mr-1 h-4 w-4" /> Mark Topic Complete
                       </Button>
-                    </div>
+                    )}
+
+                    <Button onClick={handleNextStep} disabled={generateMutation.isPending}>
+                      {generateMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating…
+                        </>
+                      ) : remainingQuestions > 0 ? (
+                        <>
+                          {nextBatchCount === 1 ? "Next Question" : `Next ${nextBatchCount} Questions`}
+                          {currentStep === totalStepsInTopic - 1 &&
+                          currentTopic.qa.length < state.maxPerTopic ? (
+                            <Sparkles className="ml-1 h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="ml-1 h-4 w-4" />
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          Continue to Next Section <ChevronRight className="ml-1 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </>
               )}
