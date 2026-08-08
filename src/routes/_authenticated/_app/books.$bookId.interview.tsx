@@ -94,6 +94,8 @@ function InterviewPage() {
   // References to decouple server query refetches from active local state editing
   const savedAnswersRef = useRef<Record<string, string>>({});
   const activeTopicRef = useRef<string | null>(null);
+  const activeSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveFn = useServerFn(saveAnswer);
   const generateFn = useServerFn(generateNextQuestion);
@@ -187,9 +189,25 @@ function InterviewPage() {
 
   const questionsPerStep = state?.questionsPerStep ?? 3;
 
-  // Batch Auto-Save Engine for Current Step
-  const flushSaveCurrentStep = useCallback(async () => {
-    if (!currentTopic) return;
+  // Batch Auto-Save Engine for Current Step with Race Condition Safeguards
+  const flushSaveCurrentStep = useCallback(async (): Promise<boolean> => {
+    // Clear any pending debounced timeout
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    // If a save operation is already in-flight, await its completion
+    if (activeSavePromiseRef.current) {
+      try {
+        const res = await activeSavePromiseRef.current;
+        if (!res) return false;
+      } catch {
+        return false;
+      }
+    }
+
+    if (!currentTopic) return true;
     const stepQas = currentTopic.qa.slice(
       currentStep * questionsPerStep,
       (currentStep + 1) * questionsPerStep,
@@ -200,53 +218,71 @@ function InterviewPage() {
       return val !== (savedAnswersRef.current[q.id] ?? "");
     });
 
-    if (changed.length === 0) return;
+    if (changed.length === 0) return true;
 
     setSavingStatus("saving");
-    try {
-      await Promise.all(
-        changed.map(async (q) => {
-          const val = drafts[q.id] ?? "";
-          await saveFn({ data: { qaId: q.id, bookId, answer: val } });
-          savedAnswersRef.current[q.id] = val;
-          try {
-            localStorage.removeItem(`interview_draft_${bookId}_${q.id}`);
-          } catch {}
-        }),
-      );
 
-      queryClient.setQueryData(["interview", bookId], (oldData: any) => {
-        if (!oldData) return oldData;
-        return {
-          ...oldData,
-          topics: oldData.topics.map((t: any) => ({
-            ...t,
-            qa: t.qa.map((q: any) => {
-              const updatedVal = drafts[q.id];
-              return updatedVal !== undefined ? { ...q, answer: updatedVal } : q;
-            }),
-          })),
-        };
-      });
+    const savePromise = (async (): Promise<boolean> => {
+      try {
+        await Promise.all(
+          changed.map(async (q) => {
+            const val = drafts[q.id] ?? "";
+            await saveFn({ data: { qaId: q.id, bookId, answer: val } });
+            savedAnswersRef.current[q.id] = val;
+            try {
+              localStorage.removeItem(`interview_draft_${bookId}_${q.id}`);
+            } catch {}
+          }),
+        );
 
-      setSavingStatus("saved");
-      setLastSavedTime(format(new Date(), "h:mm a"));
-    } catch (err: any) {
-      console.error("[Interview] Auto Save Failed:", err);
-      setSavingStatus("failed");
-      toast.error("Failed to save answer. Will retry automatically.");
-    }
+        queryClient.setQueryData(["interview", bookId], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            topics: oldData.topics.map((t: any) => ({
+              ...t,
+              qa: t.qa.map((q: any) => {
+                const updatedVal = drafts[q.id];
+                return updatedVal !== undefined ? { ...q, answer: updatedVal } : q;
+              }),
+            })),
+          };
+        });
+
+        setSavingStatus("saved");
+        setLastSavedTime(format(new Date(), "h:mm a"));
+        return true;
+      } catch (err: any) {
+        console.error("[Interview] Auto Save Failed:", err);
+        setSavingStatus("failed");
+        toast.error("Failed to save answers. Please check your connection and retry.");
+        return false;
+      } finally {
+        activeSavePromiseRef.current = null;
+      }
+    })();
+
+    activeSavePromiseRef.current = savePromise;
+    return savePromise;
   }, [currentTopic, currentStep, questionsPerStep, drafts, bookId, saveFn, queryClient]);
 
   // Fast Debounced auto-save effect (600ms timeout after user pauses typing)
   useEffect(() => {
     if (paused || !currentTopic) return;
 
-    const timeout = setTimeout(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
       flushSaveCurrentStep();
     }, 600);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [drafts, currentTopic, paused, flushSaveCurrentStep]);
 
   // Window Online Event Listener for Automatic Offline Recovery
@@ -295,15 +331,6 @@ function InterviewPage() {
     return Math.max(currentTopic.qa.length, state?.maxPerTopic ?? currentTopic.qa.length);
   }, [currentTopic, state?.maxPerTopic]);
 
-  // Dynamic check if topic meets completion criteria based on active drafts
-  const canCompleteTopic = useMemo(() => {
-    if (!currentTopic) return false;
-    const answeredCount = currentTopic.qa.filter(
-      (q) => (drafts[q.id] ?? "").trim().length > 0,
-    ).length;
-    return answeredCount >= (state?.minPerTopic ?? 3);
-  }, [currentTopic, drafts, state?.minPerTopic]);
-
   // Questions completed after finishing current step
   const completedAfterCurrentStep = useMemo(() => {
     return Math.min((currentStep + 1) * questionsPerStep, targetTopicQuestions);
@@ -345,27 +372,54 @@ function InterviewPage() {
     }
   };
 
-  // Step Navigation - Next
+  // Check if current topic is the last remaining topic needing completion
+  const isFinalTopic = useMemo(() => {
+    if (!state || !currentTopic) return false;
+    const otherIncomplete = state.topics.filter(
+      (t) => t.topic !== currentTopic.topic && t.status !== "completed",
+    );
+    return otherIncomplete.length === 0;
+  }, [state, currentTopic]);
+
+  // Step Navigation - Next Topic / Next Step with Automatic Completion Logic
   const handleNextStep = async () => {
     if (!currentTopic) return;
     setValidationError(null);
 
-    // Validate that required questions in the current step have answers
+    // 1. Verify that required questions in the current step have non-empty answers
     const unansweredInStep = currentStepQas.filter((q) => {
       const val = drafts[q.id] ?? "";
       return !val || val.trim().length === 0;
     });
 
     if (unansweredInStep.length > 0) {
-      const msg = `Please complete all ${currentStepQas.length} questions on this step before proceeding.`;
+      const msg = "Please answer all questions before continuing.";
       setValidationError(msg);
       toast.error(msg);
       return;
     }
 
-    await flushSaveCurrentStep();
+    // 2. Race Condition Protection: Ensure pending auto-save finishes and succeeds
+    const saveSuccessful = await flushSaveCurrentStep();
+    if (!saveSuccessful) {
+      const msg = "Could not save answers to database. Please check your connection and try again.";
+      setValidationError(msg);
+      return;
+    }
 
-    // If there are more steps in this topic, advance step
+    // 3. Confirm that all step answers are persisted in savedAnswersRef
+    const confirmedSaved = currentStepQas.every((q) => {
+      const val = savedAnswersRef.current[q.id] ?? "";
+      return val.trim().length > 0;
+    });
+
+    if (!confirmedSaved) {
+      const msg = "Database save pending. Please wait a moment and try again.";
+      setValidationError(msg);
+      return;
+    }
+
+    // 4. If there are more steps in this topic, advance step
     if (currentStep < totalStepsInTopic - 1) {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -373,38 +427,40 @@ function InterviewPage() {
       return;
     }
 
-    // Need more questions generated or topic is ready to complete
+    // 5. If more questions need generation for this topic
     if (currentTopic.qa.length < state!.maxPerTopic) {
       generateMutation.mutate(currentTopic.topic);
       return;
     }
 
-    // Topic is complete -> mark topic complete and advance to next incomplete topic
-    if (canCompleteTopic && currentTopic.status !== "completed") {
+    // 6. Topic is complete -> Automatically mark current topic as Completed in DB
+    if (currentTopic.status !== "completed") {
       await topicStatusMutation.mutateAsync({
         topic: currentTopic.topic,
         status: "completed",
       });
     }
 
+    // 7. Move to next incomplete topic or finish interview
     await goToNextIncompleteTopic();
   };
 
   const goToNextIncompleteTopic = async () => {
     if (!state || !currentTopic) return;
-    const currentIdx = state.topics.findIndex((t) => t.topic === currentTopic.topic);
-    const after = state.topics.slice(currentIdx + 1);
-    const before = state.topics.slice(0, currentIdx);
+    const latestState = queryClient.getQueryData<any>(["interview", bookId]) ?? state;
+
+    const currentIdx = latestState.topics.findIndex((t: any) => t.topic === currentTopic.topic);
+    const after = latestState.topics.slice(currentIdx + 1);
+    const before = latestState.topics.slice(0, currentIdx);
     const next =
-      after.find((t) => t.status !== "completed") ??
-      before.find((t) => t.status !== "completed");
+      after.find((t: any) => t.status !== "completed") ??
+      before.find((t: any) => t.status !== "completed");
 
     if (next) {
       await handleTopicSwitch(next.topic);
       toast.success(`Moving on to "${next.topic}"`);
     } else {
-      toast.success("All topics answered! Generate your manuscript next.");
-      router.navigate({ to: "/books/$bookId/manuscript", params: { bookId } });
+      toast.success("Your interview is complete! You can now generate your book manuscript.");
     }
   };
 
@@ -444,7 +500,7 @@ function InterviewPage() {
       </div>
 
       {/* Main Title & Progress Panel */}
-      <div className="grid gap-4 md:grid-cols-[1fr_280px]">
+      <div className="grid gap-4 md:grid-cols-[1fr_320px]">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">AI Interview</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -456,7 +512,9 @@ function InterviewPage() {
         <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-medium">
             <span>Overall Progress</span>
-            <span className="text-primary font-semibold">{overallProgress}%</span>
+            <span className="text-primary font-semibold">
+              {state.completedTopics} of {state.totalTopics} topics completed ({overallProgress}%)
+            </span>
           </div>
           <Progress value={overallProgress} className="h-2" />
           <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
@@ -469,26 +527,26 @@ function InterviewPage() {
       </div>
 
       {allTopicsCompleted && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 shadow-xs">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 h-6 w-6 text-primary shrink-0" />
+            <CheckCircle2 className="mt-0.5 h-7 w-7 text-emerald-600 shrink-0" />
             <div>
-              <p className="font-semibold">All interview topics completed 🎉</p>
+              <h3 className="font-bold text-base text-foreground">Your interview is complete! 🎉</h3>
               <p className="text-sm text-muted-foreground">
-                You are ready to turn these answers into a beautifully formatted hardcover manuscript.
+                All required answers are saved. You are ready to generate your family history manuscript.
               </p>
             </div>
           </div>
-          <Button asChild size="lg">
+          <Button asChild size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
             <Link to="/books/$bookId/manuscript" params={{ bookId }}>
-              Continue to Manuscript <ChevronRight className="ml-1 h-4 w-4" />
+              Continue to Book Generation <ChevronRight className="ml-1.5 h-4 w-4" />
             </Link>
           </Button>
         </div>
       )}
 
       {/* Main Layout: Topic Sidebar + 3-Question Interview Container */}
-      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* Sidebar Topics List */}
         <aside className="rounded-2xl border border-border/60 bg-card p-3 h-fit space-y-1">
           <h2 className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -498,24 +556,38 @@ function InterviewPage() {
             {state.topics.map((t) => {
               const active = t.topic === activeTopic;
               const done = t.status === "completed";
+              const inProgress = t.status === "in_progress";
               return (
                 <li key={t.topic}>
                   <button
                     onClick={() => handleTopicSwitch(t.topic)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
                       active
                         ? "bg-primary/10 text-primary font-semibold shadow-xs"
                         : "hover:bg-accent text-foreground"
                     }`}
                   >
-                    {done ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                    ) : (
-                      <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="flex-1 truncate">{t.topic}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {t.answered}/{state.maxPerTopic}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {done ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                      ) : inProgress ? (
+                        <span className="h-4 w-4 shrink-0 flex items-center justify-center">
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                        </span>
+                      ) : (
+                        <Circle className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                      )}
+                      <span className="truncate">{t.topic}</span>
+                    </div>
+
+                    <span className="text-xs font-medium shrink-0">
+                      {done ? (
+                        <span className="text-emerald-600 font-semibold">✓ Completed</span>
+                      ) : inProgress ? (
+                        <span className="text-amber-600 font-normal">● In Progress</span>
+                      ) : (
+                        <span className="text-muted-foreground/60 font-normal">○ Not Started</span>
+                      )}
                     </span>
                   </button>
                 </li>
@@ -535,9 +607,12 @@ function InterviewPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold tracking-tight">{currentTopic.topic}</h2>
-                    {currentTopic.status === "completed" && <Badge>Completed</Badge>}
+                    {currentTopic.status === "completed" && <Badge className="bg-emerald-600 text-white">✓ Completed</Badge>}
                     {currentTopic.status === "in_progress" && (
-                      <Badge variant="secondary">In Progress</Badge>
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">● In Progress</Badge>
+                    )}
+                    {currentTopic.status === "not_started" && (
+                      <Badge variant="outline" className="text-muted-foreground">○ Not Started</Badge>
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
@@ -632,7 +707,7 @@ function InterviewPage() {
                           key={qa.id}
                           className={`rounded-2xl border p-5 transition-all space-y-3 ${
                             validationError && isMissing
-                              ? "border-destructive/80 bg-destructive/5"
+                              ? "border-destructive/80 bg-destructive/5 shadow-xs"
                               : "border-border/60 bg-muted/20"
                           }`}
                         >
@@ -680,7 +755,7 @@ function InterviewPage() {
                               onBlur={() => flushSaveCurrentStep()}
                               placeholder={`Answer Question ${absoluteIndex} in as much detail as you'd like…`}
                               rows={4}
-                              className={validationError && isMissing ? "border-destructive" : ""}
+                              className={validationError && isMissing ? "border-destructive focus-visible:ring-destructive" : ""}
                             />
                             {isListeningThis && (
                               <span className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
@@ -694,43 +769,27 @@ function InterviewPage() {
                     })}
                   </div>
 
-                  {/* Navigation Controls */}
+                  {/* Navigation Controls - No Manual Mark as Complete Button */}
                   <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
-                    {canCompleteTopic && currentTopic.status !== "completed" && (
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          await flushSaveCurrentStep();
-                          await topicStatusMutation.mutateAsync({
-                            topic: currentTopic.topic,
-                            status: "completed",
-                          });
-                          await goToNextIncompleteTopic();
-                        }}
-                        disabled={topicStatusMutation.isPending}
-                      >
-                        <CheckCircle2 className="mr-1 h-4 w-4" /> Mark Topic Complete
-                      </Button>
-                    )}
-
-                    <Button onClick={handleNextStep} disabled={generateMutation.isPending}>
-                      {generateMutation.isPending ? (
+                    <Button
+                      onClick={handleNextStep}
+                      disabled={generateMutation.isPending || topicStatusMutation.isPending}
+                    >
+                      {generateMutation.isPending || topicStatusMutation.isPending ? (
                         <>
-                          <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating…
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Saving & Processing…
                         </>
-                      ) : remainingQuestions > 0 ? (
+                      ) : currentStep < totalStepsInTopic - 1 ? (
                         <>
-                          {nextBatchCount === 1 ? "Next Question" : `Next ${nextBatchCount} Questions`}
-                          {currentStep === totalStepsInTopic - 1 &&
-                          currentTopic.qa.length < state.maxPerTopic ? (
-                            <Sparkles className="ml-1 h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="ml-1 h-4 w-4" />
-                          )}
+                          Next Questions <ChevronRight className="ml-1 h-4 w-4" />
+                        </>
+                      ) : isFinalTopic ? (
+                        <>
+                          Finish Interview <CheckCircle2 className="ml-1 h-4 w-4 text-emerald-500" />
                         </>
                       ) : (
                         <>
-                          Continue to Next Section <ChevronRight className="ml-1 h-4 w-4" />
+                          Next Topic <ChevronRight className="ml-1 h-4 w-4" />
                         </>
                       )}
                     </Button>
