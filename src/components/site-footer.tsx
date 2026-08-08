@@ -63,10 +63,15 @@ const DEFAULT_MENUS: { title: string; links: FooterLink[] }[] = [
       { label: "Home", href: "/" },
       { label: "About Us", href: "/about" },
       { label: "Contact Us", href: "/contact" },
-      { label: "Privacy Policy", href: "/privacy" },
-      { label: "Terms & Conditions", href: "/terms" },
-      { label: "Refund Policy", href: "/refund" },
-      { label: "Cookie Policy", href: "/cookies" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Privacy Policy", href: "/privacy-policy" },
+      { label: "Terms & Conditions", href: "/terms-and-conditions" },
+      { label: "Refund Policy", href: "/refund-policy" },
+      { label: "Cookie Policy", href: "/cookie-policy" },
       { label: "Disclaimer", href: "/disclaimer" },
       { label: "DMCA Policy", href: "/dmca" },
     ],
@@ -74,6 +79,36 @@ const DEFAULT_MENUS: { title: string; links: FooterLink[] }[] = [
 ];
 
 type FooterMenu = { title: string; links: FooterLink[] };
+
+const LEGAL_HREFS = new Set([
+  "/privacy",
+  "/privacy-policy",
+  "/terms",
+  "/terms-and-conditions",
+  "/refund",
+  "/refund-policy",
+  "/cookies",
+  "/cookie-policy",
+  "/disclaimer",
+  "/dmca",
+]);
+
+function isLegalLink(link: FooterLink): boolean {
+  const href = (link.href || "").toLowerCase();
+  const label = (link.label || "").toLowerCase();
+  if (LEGAL_HREFS.has(href)) return true;
+  if (
+    label.includes("privacy") ||
+    label.includes("terms") ||
+    label.includes("refund") ||
+    label.includes("cookie") ||
+    label.includes("disclaimer") ||
+    label.includes("dmca")
+  ) {
+    return true;
+  }
+  return false;
+}
 
 function parseMenus(raw: unknown): FooterMenu[] {
   if (!raw) return DEFAULT_MENUS;
@@ -88,7 +123,28 @@ function parseMenus(raw: unknown): FooterMenu[] {
             : [],
         }))
         .filter((c: FooterMenu) => c.title && c.links.length);
-      if (parsed.length) return parsed;
+
+      if (parsed.length === 1 && parsed[0].links.some(isLegalLink)) {
+        const quickLinks: FooterLink[] = [];
+        const legalLinks: FooterLink[] = [];
+
+        for (const link of parsed[0].links) {
+          if (isLegalLink(link)) {
+            legalLinks.push(link);
+          } else {
+            quickLinks.push(link);
+          }
+        }
+
+        if (quickLinks.length > 0 && legalLinks.length > 0) {
+          return [
+            { title: parsed[0].title || "Quick Links", links: quickLinks },
+            { title: "Legal", links: legalLinks },
+          ];
+        }
+      }
+
+      if (parsed.length > 0) return parsed;
     }
   } catch {
     /* fall through to defaults */
@@ -145,7 +201,7 @@ export function SiteFooter() {
       className="mt-auto bg-[color:var(--ft-bg)] text-[color:var(--ft-text)]"
     >
       <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-16">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1.2fr_1.4fr] lg:gap-12">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_2fr_1.4fr] lg:gap-12">
           {/* Brand */}
           <div>
             <Link
@@ -180,33 +236,35 @@ export function SiteFooter() {
             )}
           </div>
 
-          {/* Menus */}
-          {menus.map((col) => (
-            <div key={col.title}>
-              <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ft-text)]">
-                {col.title}
-              </h4>
-              <ul className="mt-4 space-y-3 text-sm">
-                {col.links.map((l) => (
-                  <li key={`${col.title}-${l.label}`}>
-                    {l.href.startsWith("http") ? (
-                      <a href={l.href} target="_blank" rel="noopener noreferrer" className={linkCls}>
-                        {l.label}
-                      </a>
-                    ) : l.href.startsWith("/#") ? (
-                      <a href={l.href} className={linkCls}>
-                        {l.label}
-                      </a>
-                    ) : (
-                      <Link to={l.href} className={linkCls}>
-                        {l.label}
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {/* Menus Container */}
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:gap-8 lg:gap-12">
+            {menus.map((col) => (
+              <div key={col.title}>
+                <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ft-text)]">
+                  {col.title}
+                </h4>
+                <ul className="mt-4 space-y-2.5 text-sm">
+                  {col.links.map((l) => (
+                    <li key={`${col.title}-${l.label}`}>
+                      {l.href.startsWith("http") ? (
+                        <a href={l.href} target="_blank" rel="noopener noreferrer" className={linkCls}>
+                          {l.label}
+                        </a>
+                      ) : l.href.startsWith("/#") ? (
+                        <a href={l.href} className={linkCls}>
+                          {l.label}
+                        </a>
+                      ) : (
+                        <Link to={l.href} className={linkCls}>
+                          {l.label}
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
 
           {/* Contact + newsletter */}
           <div>

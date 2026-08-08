@@ -334,7 +334,7 @@ function CategoryEditor({
             <Field label="Newsletter text"><Input value={value.newsletter_text ?? ""} onChange={set("newsletter_text")} /></Field>
           </div>
           <JsonEditor
-            label='Footer menus (JSON array: [{"title":"Product","links":[{"label":"Pricing","href":"/#pricing"}]}])'
+            label='Footer menus (JSON array: [{"title":"Quick Links","links":[{"label":"Home","href":"/"}]},{"title":"Legal","links":[{"label":"Privacy Policy","href":"/privacy-policy"}]}])'
             value={value.menus}
             onChange={(v) => onChange({ menus: v })}
           />

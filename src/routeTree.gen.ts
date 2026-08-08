@@ -9,16 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsAndConditionsRouteImport } from './routes/terms-and-conditions'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as RefundRouteImport } from './routes/refund'
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as DmcaRouteImport } from './routes/dmca'
 import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as CookiePolicyRouteImport } from './routes/cookie-policy'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AboutRouteImport } from './routes/about'
@@ -81,6 +85,11 @@ import { Route as AuthenticatedAppBooksBookIdInterviewRouteImport } from './rout
 import { Route as AuthenticatedAdminAdminBlogNewRouteImport } from './routes/_authenticated/_admin/admin.blog.new'
 import { Route as AuthenticatedAdminAdminBlogPostIdRouteImport } from './routes/_authenticated/_admin/admin.blog.$postId'
 
+const TermsAndConditionsRoute = TermsAndConditionsRouteImport.update({
+  id: '/terms-and-conditions',
+  path: '/terms-and-conditions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -101,9 +110,19 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RefundPolicyRoute = RefundPolicyRouteImport.update({
+  id: '/refund-policy',
+  path: '/refund-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RefundRoute = RefundRouteImport.update({
   id: '/refund',
   path: '/refund',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -129,6 +148,11 @@ const DisclaimerRoute = DisclaimerRouteImport.update({
 const CookiesRoute = CookiesRouteImport.update({
   id: '/cookies',
   path: '/cookies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiePolicyRoute = CookiePolicyRouteImport.update({
+  id: '/cookie-policy',
+  path: '/cookie-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -325,16 +349,16 @@ const AuthenticatedAdminAdminEmailTemplatesRoute =
     path: '/admin/email-templates',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
-const AuthenticatedAdminAdminEmailCenterRoute =
-  AuthenticatedAdminAdminEmailCenterRouteImport.update({
-    id: '/admin/email-center',
-    path: '/admin/email-center',
-    getParentRoute: () => AuthenticatedAdminRoute,
-  } as any)
 const AuthenticatedAdminAdminEmailLogsRoute =
   AuthenticatedAdminAdminEmailLogsRouteImport.update({
     id: '/admin/email-logs',
     path: '/admin/email-logs',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminAdminEmailCenterRoute =
+  AuthenticatedAdminAdminEmailCenterRouteImport.update({
+    id: '/admin/email-center',
+    path: '/admin/email-center',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminAdminCouponsRoute =
@@ -487,16 +511,20 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/refund': typeof RefundRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog/': typeof BlogIndexRoute
   '/checkout': typeof AuthenticatedAppCheckoutRouteWithChildren
@@ -525,9 +553,9 @@ export interface FileRoutesByFullPath {
   '/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
+  '/admin/email-center': typeof AuthenticatedAdminAdminEmailCenterRoute
   '/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
-  '/admin/email-center': typeof AuthenticatedAdminAdminEmailCenterRoute
   '/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
   '/admin/messages': typeof AuthenticatedAdminAdminMessagesRoute
   '/admin/orders': typeof AuthenticatedAdminAdminOrdersRoute
@@ -557,16 +585,20 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/refund': typeof RefundRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog': typeof BlogIndexRoute
   '/checkout': typeof AuthenticatedAppCheckoutRouteWithChildren
@@ -595,6 +627,7 @@ export interface FileRoutesByTo {
   '/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
+  '/admin/email-center': typeof AuthenticatedAdminAdminEmailCenterRoute
   '/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
   '/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
@@ -628,16 +661,20 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/refund': typeof RefundRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
+  '/terms-and-conditions': typeof TermsAndConditionsRoute
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/blog/$slug': typeof BlogSlugRoute
@@ -668,6 +705,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/books': typeof AuthenticatedAdminAdminBooksRoute
   '/_authenticated/_admin/admin/cache': typeof AuthenticatedAdminAdminCacheRoute
   '/_authenticated/_admin/admin/coupons': typeof AuthenticatedAdminAdminCouponsRoute
+  '/_authenticated/_admin/admin/email-center': typeof AuthenticatedAdminAdminEmailCenterRoute
   '/_authenticated/_admin/admin/email-logs': typeof AuthenticatedAdminAdminEmailLogsRoute
   '/_authenticated/_admin/admin/email-templates': typeof AuthenticatedAdminAdminEmailTemplatesRoute
   '/_authenticated/_admin/admin/legal': typeof AuthenticatedAdminAdminLegalRoute
@@ -701,16 +739,20 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/disclaimer'
     | '/dmca'
     | '/llms.txt'
     | '/privacy'
+    | '/privacy-policy'
     | '/refund'
+    | '/refund-policy'
     | '/reset-password'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
+    | '/terms-and-conditions'
     | '/blog/$slug'
     | '/blog/'
     | '/checkout'
@@ -739,6 +781,7 @@ export interface FileRouteTypes {
     | '/admin/books'
     | '/admin/cache'
     | '/admin/coupons'
+    | '/admin/email-center'
     | '/admin/email-logs'
     | '/admin/email-templates'
     | '/admin/legal'
@@ -770,16 +813,20 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/disclaimer'
     | '/dmca'
     | '/llms.txt'
     | '/privacy'
+    | '/privacy-policy'
     | '/refund'
+    | '/refund-policy'
     | '/reset-password'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
+    | '/terms-and-conditions'
     | '/blog/$slug'
     | '/blog'
     | '/checkout'
@@ -808,6 +855,7 @@ export interface FileRouteTypes {
     | '/admin/books'
     | '/admin/cache'
     | '/admin/coupons'
+    | '/admin/email-center'
     | '/admin/email-logs'
     | '/admin/email-templates'
     | '/admin/legal'
@@ -840,16 +888,20 @@ export interface FileRouteTypes {
     | '/about'
     | '/auth'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/disclaimer'
     | '/dmca'
     | '/llms.txt'
     | '/privacy'
+    | '/privacy-policy'
     | '/refund'
+    | '/refund-policy'
     | '/reset-password'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
+    | '/terms-and-conditions'
     | '/_authenticated/_admin'
     | '/_authenticated/_app'
     | '/blog/$slug'
@@ -880,6 +932,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/books'
     | '/_authenticated/_admin/admin/cache'
     | '/_authenticated/_admin/admin/coupons'
+    | '/_authenticated/_admin/admin/email-center'
     | '/_authenticated/_admin/admin/email-logs'
     | '/_authenticated/_admin/admin/email-templates'
     | '/_authenticated/_admin/admin/legal'
@@ -913,16 +966,20 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AuthRoute: typeof AuthRoute
   ContactRoute: typeof ContactRoute
+  CookiePolicyRoute: typeof CookiePolicyRoute
   CookiesRoute: typeof CookiesRoute
   DisclaimerRoute: typeof DisclaimerRoute
   DmcaRoute: typeof DmcaRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   PrivacyRoute: typeof PrivacyRoute
+  PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   RefundRoute: typeof RefundRoute
+  RefundPolicyRoute: typeof RefundPolicyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
+  TermsAndConditionsRoute: typeof TermsAndConditionsRoute
   BlogSlugRoute: typeof BlogSlugRoute
   BlogIndexRoute: typeof BlogIndexRoute
   ApiPublicSettingsRoute: typeof ApiPublicSettingsRoute
@@ -932,6 +989,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms-and-conditions': {
+      id: '/terms-and-conditions'
+      path: '/terms-and-conditions'
+      fullPath: '/terms-and-conditions'
+      preLoaderRoute: typeof TermsAndConditionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -960,11 +1024,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/refund-policy': {
+      id: '/refund-policy'
+      path: '/refund-policy'
+      fullPath: '/refund-policy'
+      preLoaderRoute: typeof RefundPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/refund': {
       id: '/refund'
       path: '/refund'
       fullPath: '/refund'
       preLoaderRoute: typeof RefundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy-policy': {
+      id: '/privacy-policy'
+      path: '/privacy-policy'
+      fullPath: '/privacy-policy'
+      preLoaderRoute: typeof PrivacyPolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1000,6 +1078,13 @@ declare module '@tanstack/react-router' {
       path: '/cookies'
       fullPath: '/cookies'
       preLoaderRoute: typeof CookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookie-policy': {
+      id: '/cookie-policy'
+      path: '/cookie-policy'
+      fullPath: '/cookie-policy'
+      preLoaderRoute: typeof CookiePolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -1247,18 +1332,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminEmailTemplatesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/_authenticated/_admin/admin/email-center': {
-      id: '/_authenticated/_admin/admin/email-center'
-      path: '/admin/email-center'
-      fullPath: '/admin/email-center'
-      preLoaderRoute: typeof AuthenticatedAdminAdminEmailCenterRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
-    }
     '/_authenticated/_admin/admin/email-logs': {
       id: '/_authenticated/_admin/admin/email-logs'
       path: '/admin/email-logs'
       fullPath: '/admin/email-logs'
       preLoaderRoute: typeof AuthenticatedAdminAdminEmailLogsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/_admin/admin/email-center': {
+      id: '/_authenticated/_admin/admin/email-center'
+      path: '/admin/email-center'
+      fullPath: '/admin/email-center'
+      preLoaderRoute: typeof AuthenticatedAdminAdminEmailCenterRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/_admin/admin/coupons': {
@@ -1449,6 +1534,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminBooksRoute: typeof AuthenticatedAdminAdminBooksRoute
   AuthenticatedAdminAdminCacheRoute: typeof AuthenticatedAdminAdminCacheRoute
   AuthenticatedAdminAdminCouponsRoute: typeof AuthenticatedAdminAdminCouponsRoute
+  AuthenticatedAdminAdminEmailCenterRoute: typeof AuthenticatedAdminAdminEmailCenterRoute
   AuthenticatedAdminAdminEmailLogsRoute: typeof AuthenticatedAdminAdminEmailLogsRoute
   AuthenticatedAdminAdminEmailTemplatesRoute: typeof AuthenticatedAdminAdminEmailTemplatesRoute
   AuthenticatedAdminAdminLegalRoute: typeof AuthenticatedAdminAdminLegalRoute
@@ -1485,11 +1571,11 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminBooksRoute: AuthenticatedAdminAdminBooksRoute,
   AuthenticatedAdminAdminCacheRoute: AuthenticatedAdminAdminCacheRoute,
   AuthenticatedAdminAdminCouponsRoute: AuthenticatedAdminAdminCouponsRoute,
+  AuthenticatedAdminAdminEmailCenterRoute:
+    AuthenticatedAdminAdminEmailCenterRoute,
   AuthenticatedAdminAdminEmailLogsRoute: AuthenticatedAdminAdminEmailLogsRoute,
   AuthenticatedAdminAdminEmailTemplatesRoute:
     AuthenticatedAdminAdminEmailTemplatesRoute,
-  AuthenticatedAdminAdminEmailCenterRoute:
-    AuthenticatedAdminAdminEmailCenterRoute,
   AuthenticatedAdminAdminLegalRoute: AuthenticatedAdminAdminLegalRoute,
   AuthenticatedAdminAdminMessagesRoute: AuthenticatedAdminAdminMessagesRoute,
   AuthenticatedAdminAdminOrdersRoute: AuthenticatedAdminAdminOrdersRoute,
@@ -1590,16 +1676,20 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AuthRoute: AuthRoute,
   ContactRoute: ContactRoute,
+  CookiePolicyRoute: CookiePolicyRoute,
   CookiesRoute: CookiesRoute,
   DisclaimerRoute: DisclaimerRoute,
   DmcaRoute: DmcaRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   PrivacyRoute: PrivacyRoute,
+  PrivacyPolicyRoute: PrivacyPolicyRoute,
   RefundRoute: RefundRoute,
+  RefundPolicyRoute: RefundPolicyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
+  TermsAndConditionsRoute: TermsAndConditionsRoute,
   BlogSlugRoute: BlogSlugRoute,
   BlogIndexRoute: BlogIndexRoute,
   ApiPublicSettingsRoute: ApiPublicSettingsRoute,
